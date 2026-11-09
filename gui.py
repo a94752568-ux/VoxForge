@@ -227,6 +227,25 @@ class CardDelegate(QStyledItemDelegate):
     def __init__(self, *, height: int = 58, parent=None):
         super().__init__(parent)
         self.height = height
+        # Cache de objetos de dibujo reusables (evita asignaciones por frame)
+        self._title_font = QFont()
+        self._title_font.setPixelSize(13)
+        self._title_font.setWeight(QFont.Weight.DemiBold)
+        self._sub_font = QFont()
+        self._sub_font.setPixelSize(11)
+        self._badge_font = QFont()
+        self._badge_font.setPixelSize(9)
+        self._badge_font.setWeight(QFont.Weight.DemiBold)
+        self._num_font = QFont()
+        self._num_font.setPixelSize(11)
+        self._num_font.setWeight(QFont.Weight.DemiBold)
+        self._pen_no = QPen(Qt.PenStyle.NoPen)
+        self._pen_selected = QPen(QColor("#f2f7ff"))
+        self._pen_normal = QPen(QColor("#dbe6f7"))
+        self._pen_sub_selected = QPen(QColor("#9fb0cc"))
+        self._pen_sub_normal = QPen(QColor(MUTED))
+        self._pen_number = QPen(QColor("#aebdd8"))
+        self._brush_num_bg = QBrush(QColor("#18263d"))
 
     def sizeHint(self, option, index):
         return QSize(0, self.height)
@@ -255,7 +274,7 @@ class CardDelegate(QStyledItemDelegate):
             accent = QColor(accent_value or CYAN)
             if not selected:
                 accent.setAlpha(165)
-            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setPen(self._pen_no)
             painter.setBrush(accent)
             painter.drawRoundedRect(
                 QRectF(rect.left() + 1, rect.top() + 10, 3, rect.height() - 20), 1.5, 1.5
@@ -265,14 +284,11 @@ class CardDelegate(QStyledItemDelegate):
         number = index.data(ROLE_NUMBER)
         if number is not None and str(number) != "":
             box = QRect(x, rect.center().y() - 13, 30, 26)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#18263d"))
+            painter.setPen(self._pen_no)
+            painter.setBrush(self._brush_num_bg)
             painter.drawRoundedRect(box, 7, 7)
-            painter.setPen(QColor("#aebdd8"))
-            f_num = QFont(option.font)
-            f_num.setPixelSize(11)
-            f_num.setWeight(QFont.Weight.DemiBold)
-            painter.setFont(f_num)
+            painter.setPen(self._pen_number)
+            painter.setFont(self._num_font)
             painter.drawText(box, Qt.AlignmentFlag.AlignCenter, str(number))
             x += 40
 
@@ -280,20 +296,17 @@ class CardDelegate(QStyledItemDelegate):
         badge_w = 0
         if badge:
             color = QColor(index.data(ROLE_BADGE_COLOR) or MUTED)
-            f_badge = QFont(option.font)
-            f_badge.setPixelSize(9)
-            f_badge.setWeight(QFont.Weight.DemiBold)
-            badge_w = QFontMetrics(f_badge).horizontalAdvance(str(badge)) + 16
+            painter.setFont(self._badge_font)
+            badge_w = QFontMetrics(self._badge_font).horizontalAdvance(str(badge)) + 16
             badge_rect = QRect(
                 rect.right() - 12 - badge_w, rect.center().y() - 9, badge_w, 18
             )
             tint = QColor(color)
             tint.setAlpha(28)
-            painter.setPen(QPen(QColor(color), 1))
+            painter.setPen(QPen(color, 1))
             painter.setBrush(tint)
             painter.drawRoundedRect(badge_rect, 9, 9)
             painter.setPen(color)
-            painter.setFont(f_badge)
             painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, str(badge))
 
         text_right = rect.right() - 14 - (badge_w + 8 if badge_w else 0)
@@ -302,12 +315,9 @@ class CardDelegate(QStyledItemDelegate):
         title = str(index.data(ROLE_TITLE) or index.data(Qt.ItemDataRole.DisplayRole) or "")
         subtitle = str(index.data(ROLE_SUB) or "")
 
-        f_title = QFont(option.font)
-        f_title.setPixelSize(13)
-        f_title.setWeight(QFont.Weight.DemiBold)
-        painter.setFont(f_title)
-        painter.setPen(QColor("#f2f7ff") if selected else QColor("#dbe6f7"))
-        fm_title = QFontMetrics(f_title)
+        painter.setFont(self._title_font)
+        painter.setPen(self._pen_selected if selected else self._pen_normal)
+        fm_title = QFontMetrics(self._title_font)
         title = fm_title.elidedText(title, Qt.TextElideMode.ElideRight, width)
         if subtitle:
             painter.drawText(
@@ -315,11 +325,9 @@ class CardDelegate(QStyledItemDelegate):
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                 title,
             )
-            f_sub = QFont(option.font)
-            f_sub.setPixelSize(11)
-            painter.setFont(f_sub)
-            painter.setPen(QColor("#9fb0cc") if selected else QColor(MUTED))
-            fm_sub = QFontMetrics(f_sub)
+            painter.setFont(self._sub_font)
+            painter.setPen(self._pen_sub_selected if selected else self._pen_sub_normal)
+            fm_sub = QFontMetrics(self._sub_font)
             subtitle = fm_sub.elidedText(subtitle, Qt.TextElideMode.ElideRight, width)
             painter.drawText(
                 QRect(x, rect.top() + 29, width, 16),
@@ -336,7 +344,7 @@ class CardDelegate(QStyledItemDelegate):
         painter.restore()
 
 
-class EmptyList(QListWidget):
+
     """Lista con un mensaje de estado vacío dibujado dentro."""
 
     def __init__(self, placeholder: str = "", parent=None):

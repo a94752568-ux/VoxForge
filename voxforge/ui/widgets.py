@@ -26,6 +26,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QColor,
+    QGraphicsOpacityEffect,
     QLinearGradient,
     QPainter,
     QPainterPath,
@@ -205,12 +206,13 @@ class PulseChip(QFrame):
 
         # Color y animación
         self._color = QColor(color)
-        self._pulse_anim = QPropertyAnimation(self._dot, b"geometry")
+        self._opacity_effect = QGraphicsOpacityEffect()
+        self._dot.setGraphicsEffect(self._opacity_effect)
+        self._pulse_anim = QPropertyAnimation(self._opacity_effect, b"opacity")
         self._pulse_anim.setDuration(1200)
         self._pulse_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
         self._pulse_anim.setLoopCount(-1)  # Infinito
 
-        self._base_geometry = QRectF(0, 0, 10, 10)
         self._apply_style(color)
         self._start_pulse()
 
@@ -223,13 +225,8 @@ class PulseChip(QFrame):
         )
 
     def _start_pulse(self) -> None:
-        rect = self._dot.geometry()
-        self._pulse_anim.setStartValue(rect)
-        # Crear rectángulo ligeramente más grande para el pulso
-        big = QRectF(
-            rect.x() - 2, rect.y() - 2, rect.width() + 4, rect.height() + 4
-        )
-        self._pulse_anim.setEndValue(big)
+        self._pulse_anim.setStartValue(0.4)
+        self._pulse_anim.setEndValue(1.0)
         self._pulse_anim.start()
 
     def set_status(self, label: str, color: str = CYAN) -> None:
