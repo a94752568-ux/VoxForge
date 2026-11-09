@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from .base import ModelUnavailableError, TTSEngine
+from ..audio_optimizer import optimize_fragment
 
 
 class XttsEngine(TTSEngine):
@@ -128,6 +129,26 @@ class XttsEngine(TTSEngine):
         if isinstance(wav, dict):
             wav = wav.get("wav", wav.get("audio", list(wav.values())[0]))
         wav = np.asarray(wav, dtype=np.float32)
+
+        # --- Post-procesamiento profesional para reducir anomalías ---
+        # Aplica: DC offset removal, fade in/out, normalización RMS y soft-clip.
+        # Esto elimina clicks, iguala volumen y previene distorsión antes de
+        # que el audio salga del motor.
+        try:
+            wav = optimize_fragment(
+                wav,
+                self.sample_rate,
+                target_rms=0.15,
+                fade_ms=5.0,
+                trim_edges=False,  # no recortar en el motor; el pipeline lo hace
+                remove_dc=True,
+                soft_limit=True,
+                normalize=True,
+            )
+        except Exception:
+            # Si la optimización falla, devolver el audio crudo sin bloquear
+            pass
+        # ------------------------------------------------------------
 
         # Escritura a disco separada de la síntesis pura
         if write_to is not None:

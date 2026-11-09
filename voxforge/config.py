@@ -36,6 +36,15 @@ class Settings:
     max_retries: int = 2            # reintentos con otra semilla si un fragmento sale anómalo
     
     # =========================================================================
+    # Configuración de optimización de audio profesional
+    # =========================================================================
+    # Post-procesamiento por fragmento para reducir anomalías en el audio final
+    target_rms: float = 0.15        # Nivel RMS objetivo para normalización entre fragmentos
+    fade_ms: float = 5.0            # Duración de fade in/out en ms (eliminar clicks en bordes)
+    crossfade_ms: float = 10.0      # Crossfade entre fragmentos en ms (uniones suaves)
+    max_normalize_gain_db: float = 12.0  # Ganancia máxima de normalización (evitar amplificar ruido)
+    
+    # =========================================================================
     # Configuración de audio profesional (EBU R128)
     # =========================================================================
     # Normalización de loudness (EBU R128 para audiolibros: -16 LUFS)

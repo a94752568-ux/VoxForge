@@ -24,6 +24,11 @@ from .db import Store
 from .engines.base import TTSEngine
 from .textutil import split_segments
 from .thermal import cpu_temp_c, wait_if_hot
+from .audio_optimizer import (
+    prepare_audio_for_cache,
+    assemble_final_audio,
+    analyze_fragment_quality,
+)
 from .utils import (
     SynthCancelledError, check_disk_space, estimate_audio_size_bytes,
     AudioValidationError, validate_audio_file,
@@ -134,14 +139,6 @@ def _export_audio(audio: np.ndarray, sr: int, out_path: Path) -> None:
             cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(tmp_path),
                    "-c:a", "libvorbis", "-q:a", "5", str(out_path)]
 
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"ffmpeg fallo al exportar a {ext}:\n{e.stderr}") from e
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"ffmpeg fallo al exportar a {ext}:\n{e.stderr}") from e
         try:
             subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
@@ -390,6 +387,23 @@ def narrate(
                     )
 
                 audio, attempt, audio_s, good = best
+                # --- Optimización profesional de audio por fragmento ---
+                # Aplica: DC offset removal, trimming silencio, fade in/out,
+                # normalización RMS y soft-clip para reducir anomalías.
+                try:
+                    audio = prepare_audio_for_cache(audio, sr, settings=settings)
+                    # Recalcular duración tras optimización
+                    audio_s = len(audio) / sr
+                    # Análisis de calidad: detectar anomalías residuales
+                    frag_quality = analyze_fragment_quality(audio, sr)
+                    if frag_quality.anomaly_flags:
+                        log(
+                            f"  [{text_index}/{text_total}] anomalías detectadas: "
+                            f"{', '.join(frag_quality.anomaly_flags)}"
+                        )
+                except Exception as exc:
+                    log(f"  [{text_index}/{text_total}] aviso: optimización de audio falló: {exc}")
+                # -------------------------------------------------------
                 # Escritura atómica: archivo temporal en mismo directorio + rename
                 # Evita wavs corruptos si el job muere a mitad de escritura.
                 tmp_fd, tmp_path = tempfile.mkstemp(
@@ -471,7 +485,9 @@ def narrate(
                     error_message="Narración interrumpida"
                 )
 
-    final = np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
+    final = assemble_final_audio(
+        parts, sr, crossfade_ms=getattr(settings, "crossfade_ms", 10.0)
+    ) if parts else np.zeros(0, dtype=np.float32)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     
     try:
