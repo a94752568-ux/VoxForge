@@ -53,6 +53,7 @@ BG = PALETTE["bg"]
 PANEL = PALETTE["panel"]
 PANEL_2 = PALETTE["panel2"]
 PANEL_3 = PALETTE["panel3"]
+BORDER = "#1E2438"
 
 
 class MainWindow(QMainWindow):
@@ -134,7 +135,7 @@ class MainWindow(QMainWindow):
             f"QWidget#titleBar {{ "
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
             f"stop:0 {PALETTE['dark']}, stop:1 {PALETTE['panel']}); "
-            f"border-bottom: 1px solid #1E2438; "
+            f"border-bottom: 1px solid BORDER; "
             f"}}"
         )
 
@@ -149,7 +150,7 @@ class MainWindow(QMainWindow):
         logo.setStyleSheet(
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
             f"stop:0 {CYAN}, stop:1 {PURPLE}); "
-            f"color: #02040A; border-radius: 10px; font-size: 18px; font-weight: 900;"
+            f"color: PALETTE['dark']; border-radius: 10px; font-size: 18px; font-weight: 900;"
         )
         layout.addWidget(logo)
 
@@ -234,7 +235,7 @@ class MainWindow(QMainWindow):
         guide.setStyleSheet(
             f"QFrame#sideCard {{ "
             f"background: {PANEL_3}; "
-            f"border: 1px solid #1E2438; "
+            f"border: 1px solid BORDER; "
             f"border-radius: 10px; "
             f"}}"
         )
@@ -275,7 +276,7 @@ class MainWindow(QMainWindow):
             f"QFrame#contextHeader {{ "
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
             f"stop:0 #122138, stop:1 #0B1424); "
-            f"border-bottom: 1px solid #1E2438; "
+            f"border-bottom: 1px solid BORDER; "
             f"}}"
         )
         ctx_lay = QHBoxLayout(ctx)
@@ -312,7 +313,7 @@ class MainWindow(QMainWindow):
         frag_card.setStyleSheet(
             f"QFrame#fragmentsCard {{ "
             f"background: {PANEL}; "
-            f"border: 1px solid #1E2438; "
+            f"border: 1px solid BORDER; "
             f"border-radius: 10px; "
             f"}}"
         )
@@ -376,7 +377,7 @@ class MainWindow(QMainWindow):
         self.tabs.setObjectName("mainTabs")
         self.tabs.setStyleSheet(
             f"QTabWidget::pane {{ "
-            f"border: 1px solid #1E2438; "
+            f"border: 1px solid BORDER; "
             f"border-radius: 10px; "
             f"background: {PANEL}; "
             f"}}"
@@ -421,7 +422,7 @@ class MainWindow(QMainWindow):
         job_card.setStyleSheet(
             f"QFrame#jobCard {{ "
             f"background: {PANEL_3}; "
-            f"border: 1px solid #1E2438; "
+            f"border: 1px solid BORDER; "
             f"border-radius: 10px; "
             f"}}"
         )
@@ -462,10 +463,10 @@ class MainWindow(QMainWindow):
         self.log_view.setObjectName("logView")
         self.log_view.setStyleSheet(
             f"QListWidget#logView {{ "
-            f"background: #080F1C; "
-            f"border: 1px solid #1E2438; "
+            f"background: PALETTE['panel']; "
+            f"border: 1px solid BORDER; "
             f"border-radius: 8px; "
-            f"color: #A8C3E0; "
+            f"color: PALETTE['text']; "
             f"font-family: monospace; "
             f"font-size: 10px; "
             f"}}"
@@ -512,7 +513,7 @@ class MainWindow(QMainWindow):
             f"QFrame#playerBar {{ "
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
             f"stop:0 {PANEL_2}, stop:1 {PANEL}); "
-            f"border-top: 1px solid #1E2438; "
+            f"border-top: 1px solid BORDER; "
             f"}}"
         )
 
@@ -528,7 +529,7 @@ class MainWindow(QMainWindow):
         art.setStyleSheet(
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
             f"stop:0 {CYAN}, stop:1 {PURPLE}); "
-            f"color: #02040A; border-radius: 10px; font-size: 20px; font-weight: 900;"
+            f"color: PALETTE['dark']; border-radius: 10px; font-size: 20px; font-weight: 900;"
         )
         lay.addWidget(art)
 
@@ -554,7 +555,7 @@ class MainWindow(QMainWindow):
             f"QPushButton#play {{ "
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
             f"stop:0 {CYAN}, stop:1 {PURPLE}); "
-            f"color: #02040A; border: none; border-radius: 20px; "
+            f"color: PALETTE['dark']; border: none; border-radius: 20px; "
             f"font-size: 15px; font-weight: 900; "
             f"}}"
             f"QPushButton#play:hover {{ "
@@ -570,11 +571,11 @@ class MainWindow(QMainWindow):
         self.btn_stop.setStyleSheet(
             f"QPushButton#btnStop {{ "
             f"background: {PANEL_3}; "
-            f"color: {MUTED}; border: 1px solid #1E2438; "
+            f"color: {MUTED}; border: 1px solid BORDER; "
             f"border-radius: 8px; "
             f"}}"
             f"QPushButton#btnStop:hover {{ "
-            f"background: #1E2A3A; "
+            f"background: PALETTE['panel3']; "
             f"}}"
         )
         lay.addWidget(self.btn_stop)
@@ -605,7 +606,7 @@ class MainWindow(QMainWindow):
             f"QSlider::groove:horizontal {{ height: 4px; background: #1A2842; border-radius: 2px; }}"
             f"QSlider::sub-page:horizontal {{ background: {CYAN}; border-radius: 2px; }}"
             f"QSlider::handle:horizontal {{ width: 14px; margin: -5px 0; border-radius: 7px; "
-            f"background: #EAFcFF; border: 1px solid {CYAN}; }}"
+            f"background: PALETTE['text']; border: 1px solid {CYAN}; }}"
         )
         lay.addWidget(self.vol_slider)
 
