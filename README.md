@@ -1,6 +1,6 @@
 # VoxForge Local
 
-> **Estudio de clonaci\u00f3n de voz y narraci\u00f3n 100% local/offline en Python**
+> **Estudio de clonación de voz y narración 100% local/offline en Python**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
@@ -8,39 +8,39 @@
 
 ---
 
-## \u2728 Descripci\u00f3n
+## ✨ Descripción
 
-**VoxForge Local** es un estudio completo para la creaci\u00f3n de audiolibros y narraciones con **clonaci\u00f3n de voz 100% local**. No requiere conexi\u00f3n a Internet, no env\u00eda datos a la nube, y funciona \u00fanicamente con la potencia de tu CPU.
+**VoxForge Local** es un estudio completo para la creación de audiolibros y narraciones con **clonación de voz 100% local**. No requiere conexión a Internet, no envía datos a la nube, y funciona únicamente con la potencia de tu CPU.
 
-**Caracter\u00edsticas principales:**
+**Características principales:**
 
-- \u2705 **Clonaci\u00f3n de voz multiling\u00fce** con Coqui XTTS-v2
-- \u2705 **S\u00edntesis de voz natural** en m\u00e1s de 15 idiomas
-- \u2705 **Gesti\u00f3n de proyectos** con cap\u00adtulos organizados
-- \u2705 **Normalizaci\u00f3n EBU R128** para calidad de estudio profesional
-- \u2705 **Sistema de cach\u00e9 inteligente** para reanudar narraciones interrumpidas
-- \u2705 **Interfaz CLI y GUI** con PySide6
-- \u2705 **100% offline** - Todo el procesamiento se realiza localmente
-- \u2705 **Solo CPU** - Compatible con sistemas sin GPU
+- ✅ **Clonación de voz multilingüe** con Coqui XTTS-v2
+- ✅ **Síntesis de voz natural** en más de 15 idiomas
+- ✅ **Gestión de proyectos** con cap­tulos organizados
+- ✅ **Normalización EBU R128** para calidad de estudio profesional
+- ✅ **Sistema de caché inteligente** para reanudar narraciones interrumpidas
+- ✅ **Interfaz CLI y GUI** con PySide6
+- ✅ **100% offline** - Todo el procesamiento se realiza localmente
+- ✅ **Solo CPU** - Compatible con sistemas sin GPU
 
 ---
 
-## \u26a1 Requisitos del Sistema
+## ⚡ Requisitos del Sistema
 
-| Requisito | M\u00ednimo | Recomendado |
+| Requisito | Mínimo | Recomendado |
 |-----------|------------|-------------|
 | **Sistema Operativo** | Linux, Windows, macOS | Linux (Ubuntu 22.04+) |
 | **Python** | 3.10 | 3.11+ |
 | **RAM** | 8 GB | 16 GB |
-| **CPU** | 4 n\u00facleos | 8+ n\u00facleos (Intel i5/i7/Ryzen) |
-| **Almacenamiento** | 5 GB libres | 20 GB libres (para modelos y cach\u00e9) |
+| **CPU** | 4 núcleos | 8+ núcleos (Intel i5/i7/Ryzen) |
+| **Almacenamiento** | 5 GB libres | 20 GB libres (para modelos y caché) |
 | **GPU** | No requerida | No requerida (funciona solo con CPU) |
 
 ---
 
-## \u2308 Instalaci\u00f3n
+## ⌈ Instalación
 
-### Opci\u00f3n 1: Instalaci\u00f3n con pipx (Recomendado)
+### Opción 1: Instalación con pipx (Recomendado)
 
 ```bash
 # Instalar pipx (si no lo tienes)
@@ -87,7 +87,7 @@ voxforge model download
 
 ---
 
-## \u2680 Uso R\u00e1pido
+## ⚀ Uso Rápido
 
 ### 1. Crear un perfil de voz
 
@@ -107,7 +107,7 @@ voxforge voice add mi_voz /ruta/a/tu/muestra.wav --language es
 voxforge project create mi_libro --voice mi_voz --language es
 ```
 
-### 3. A\u00f1adir un cap\u00edtulo
+### 3. Añadir un capítulo
 
 ```bash
 # Desde un archivo de texto
@@ -120,7 +120,7 @@ voxforge chapter add mi_libro 2 --file capitulo2.pdf
 voxforge chapter add mi_libro 3 --file capitulo3.docx
 ```
 
-### 4. Narrar un cap\u00edtulo
+### 4. Narrar un capítulo
 
 ```bash
 # Narrar con la voz clonada
@@ -148,9 +148,9 @@ voxforge project-narrate mi_libro --format flac --out-dir audiobook/
 
 ---
 
-## \u2753 Interfaz Gr\u00e1fica
+## ❓ Interfaz Gráfica
 
-Para iniciar la interfaz gr\u00e1fica:
+Para iniciar la interfaz gráfica:
 
 ```bash
 # Con pipx
@@ -163,20 +163,20 @@ python -m gui
 python gui.py
 ```
 
-La interfaz gr\u00e1fica ofrece:
-- Gesti\u00f3n visual de proyectos y cap\u00edtulos
-- Grabaci\u00f3n de voz integrada
-- Reproducci\u00f3n de audio
-- Monitoreo del progreso de narraci\u00f3n
-- Configuraci\u00f3n de efectos de voz
+La interfaz gráfica ofrece:
+- Gestión visual de proyectos y capítulos
+- Grabación de voz integrada
+- Reproducción de audio
+- Monitoreo del progreso de narración
+- Configuración de efectos de voz
 
 ---
 
-## \u2699 Configuraci\u00f3n
+## ⚙ Configuración
 
-### Archivo de configuraci\u00f3n
+### Archivo de configuración
 
-La configuraci\u00f3n se guarda en `~/.voxforge/config.json` (Linux/macOS) o `%APPDATA%\voxforge\config.json` (Windows).
+La configuración se guarda en `~/.voxforge/config.json` (Linux/macOS) o `%APPDATA%\voxforge\config.json` (Windows).
 
 ```json
 {
@@ -192,7 +192,7 @@ La configuraci\u00f3n se guarda en `~/.voxforge/config.json` (Linux/macOS) o `%A
 }
 ```
 
-### Opciones de configuraci\u00f3n
+### Opciones de configuración
 
 | Opción | Tipo | Descripción | Valor por defecto |
 |--------|------|------------------|-------------------|
@@ -201,28 +201,28 @@ La configuraci\u00f3n se guarda en `~/.voxforge/config.json` (Linux/macOS) o `%A
 | `sample_rate` | int | Frecuencia de muestreo | 24000 |
 | `apply_ebu_r128` | bool | Aplicar normalización EBU R128 | true |
 | `cache_dir` | string | Directorio de caché | "data/cache" |
-| `export_dir` | string | Directorio de exportaci\u00f3n | "data/exports" |
+| `export_dir` | string | Directorio de exportación | "data/exports" |
 | `max_retries` | int | Máximos reintentos de síntesis | 3 |
 | `auto_unload` | bool | Descargar modelo automáticamente | true |
 | `auto_unload_minutes` | int | Minutos de inactividad antes de descargar | 10 |
 
 ---
 
-## \u272f Idiomas Soportados
+## ✯ Idiomas Soportados
 
-| C\u00f3digo | Idioma | Nombre nativo |
+| Código | Idioma | Nombre nativo |
 |-------|--------|----------------|
-| `es` | Espa\u00f1ol | Espa\u00f1ol |
-| `en` | Ingl\u00e9s | English |
-| `fr` | Franc\u00e9s | Fran\u00e7ais |
-| `de` | Alem\u00e1n | Deutsch |
+| `es` | Español | Español |
+| `en` | Inglés | English |
+| `fr` | Francés | Français |
+| `de` | Alemán | Deutsch |
 | `it` | Italiano | Italiano |
-| `pt` | Portugu\u00e9s | Portugu\u00eas |
-| `ru` | Ruso | \u0420\u0443\u0441\u0441\u043a\u0438\u0439 |
-| `zh` | Chino | \u4e2d\u6587 |
-| `ja` | Japon\u00e9s | \u65e5\u672c\u8a9e |
-| `ar` | \u00e1rabe | \u0627\u0644\u0639\u0631\u0628\u064a\u0629 |
-| Y muchos m\u00e1s... |
+| `pt` | Portugués | Português |
+| `ru` | Ruso | Русский |
+| `zh` | Chino | 中文 |
+| `ja` | Japonés | 日本語 |
+| `ar` | árabe | العربية |
+| Y muchos más... |
 
 Para ver todos los idiomas soportados:
 ```bash
@@ -231,11 +231,11 @@ voxforge voice prepare --help
 
 ---
 
-## \u26a0 Eficiencia y Rendimiento
+## ⚠ Eficiencia y Rendimiento
 
 ### Uso de CPU
 
-VoxForge funciona completamente en CPU. La velocidad de sintetizaci\u00f3n depende de tu hardware:
+VoxForge funciona completamente en CPU. La velocidad de sintetización depende de tu hardware:
 
 | Hardware | Velocidad (relativa a tiempo real) |
 |----------|-------------------------------------|
@@ -250,19 +250,19 @@ VoxForge funciona completamente en CPU. La velocidad de sintetizaci\u00f3n depen
 |------------|----------------|
 | Modelo XTTS-v2 | ~2-3 GB |
 | Procesamiento de audio | ~500 MB - 1 GB |
-| Cach\u00e9 de fragmentos | Depende del tama\u00f1o del proyecto |
+| Caché de fragmentos | Depende del tamaño del proyecto |
 
-**Nota:** El modelo se carga en memoria solo cuando se necesita y se descarga automáticamente despu\u00e9s de 10 minutos de inactividad (configurable).
+**Nota:** El modelo se carga en memoria solo cuando se necesita y se descarga automáticamente después de 10 minutos de inactividad (configurable).
 
-### Sistema de Cach\u00e9
+### Sistema de Caché
 
-VoxForge usa un sistema de cach\u00e9 inteligente que:
+VoxForge usa un sistema de caché inteligente que:
 - Guarda fragmentos de audio ya sintetizados
 - Permite reanudar narraciones interrumpidas
 - Evita reprocesar el mismo texto
 - Ahorra tiempo y recursos
 
-Para limpiar la cach\u00e9:
+Para limpiar la caché:
 ```bash
 voxforge cache cleanup
 
@@ -278,7 +278,7 @@ voxforge cache cleanup --all
 
 ---
 
-## \u274c Soluci\u00f3n de Problemas
+## ❌ Solución de Problemas
 
 ### Problema: No se encuentra el perfil de voz
 
@@ -286,7 +286,7 @@ voxforge cache cleanup --all
 Error: No existe el perfil de voz 'mi_voz'
 ```
 
-**Soluci\u00f3n:**
+**Solución:**
 ```bash
 # Listar perfiles disponibles
 voxforge voice list
@@ -298,10 +298,10 @@ voxforge voice record --name mi_voz
 ### Problema: Error al cargar el modelo XTTS
 
 ```bash
-Error: El modelo no est\u00e1 descargado
+Error: El modelo no está descargado
 ```
 
-**Soluci\u00f3n:**
+**Solución:**
 ```bash
 # Descargar modelos
 voxforge model download
@@ -309,15 +309,15 @@ voxforge model download
 
 ### Problema: El audio suena muy bajo
 
-**Soluci\u00f3n:** La normalización EBU R128 ya está aplicada por defecto. Si el audio suena bajo:
+**Solución:** La normalización EBU R128 ya está aplicada por defecto. Si el audio suena bajo:
 - Verifica que `apply_ebu_r128` esté activo en la configuración
 - Asegúrate de que la muestra de voz sea clara y con buen nivel
 
-### Problema: La narraci\u00f3n se interrumpe
+### Problema: La narración se interrumpe
 
-**Soluci\u00f3n:** VoxForge guarda el progreso automáticamente. Para reanudar:
+**Solución:** VoxForge guarda el progreso automáticamente. Para reanudar:
 ```bash
-# Reanudar desde el punto de interrupci\u00f3n
+# Reanudar desde el punto de interrupción
 voxforge chapter narrate mi_libro 1 --out Capitulo_01.mp3
 
 # O regenerar completamente
@@ -326,7 +326,7 @@ voxforge chapter narrate mi_libro 1 --regen --out Capitulo_01.mp3
 
 ### Problema: Espacio en disco insuficiente
 
-**Soluci\u00f3n:**
+**Solución:**
 ```bash
 # Limpiar cache
 voxforge cache cleanup --all
@@ -337,7 +337,7 @@ voxforge config set cache_dir /ruta/a/disco/grande/cache
 
 ---
 
-## \u2696 Contribuci\u00f3n
+## ⚖ Contribución
 
 ¡Las contribuciones son bienvenidas! Por favor sigue estos pasos:
 
@@ -345,16 +345,16 @@ voxforge config set cache_dir /ruta/a/disco/grande/cache
 2. Crea una rama para tu funcionalidad (`git checkout -b feature/mi-funcionalidad`)
 3. Realiza tus cambios
 4. Ejecuta las pruebas: `python -m pytest tests/`
-5. Realiza el commit de tus cambios (`git commit -m "A\u00f1ade mi funcionalidad"`)
-6. Env\u00eda un Pull Request
+5. Realiza el commit de tus cambios (`git commit -m "Añade mi funcionalidad"`)
+6. Envía un Pull Request
 
-### Est\u00e1ndares de C\u00f3digo
+### Estándares de Código
 
-- PEP 8 (Gu\u00eda de estilo de Python)
-- Type hints obligatorios en funciones p\u00fablicas
+- PEP 8 (Guía de estilo de Python)
+- Type hints obligatorios en funciones públicas
 - Nombres de variables y funciones en snake_case
 - Nombres de clases en PascalCase
-- Docstrings en todas las funciones p\u00fablicas
+- Docstrings en todas las funciones públicas
 
 ### Ejecutar pruebas
 
@@ -371,7 +371,7 @@ python -m pytest tests/ --cov=voxforge
 
 ---
 
-## \u270f Limpieza
+## ✏ Limpieza
 
 Para limpiar archivos temporales y cache:
 
@@ -388,55 +388,55 @@ rm -rf .venv
 
 ---
 
-## \u263a roadmap
+## ☺ roadmap
 
-### Versi\u00f3n 0.6.0 (Actual)
-- \u2705 Capa de servicios centralizada
-- \u2705 Normalizaci\u00f3n EBU R128
-- \u2705 Reanudaci\u00f3n de narraciones
-- \u2705 Soporta m\u00e1s de 15 idiomas
+### Versión 0.6.0 (Actual)
+- ✅ Capa de servicios centralizada
+- ✅ Normalización EBU R128
+- ✅ Reanudación de narraciones
+- ✅ Soporta más de 15 idiomas
 
-### Versi\u00f3n 0.7.0 (Pr\u00f3ximo)
-- \u2192 Interfaz REST API
-- \u2192 Soporte para m\u00faltiples motores TTS
-- \u2192 Mejoras en la GUI
-- \u2192 Documentaci\u00f3n completa
+### Versión 0.7.0 (Próximo)
+- → Interfaz REST API
+- → Soporte para múltiples motores TTS
+- → Mejoras en la GUI
+- → Documentación completa
 
-### Versi\u00f3n 0.8.0
+### Versión 0.8.0
 - → Integración con Voice Engine
-- \u2192 Soporte para GPU (opcional)
+- → Soporte para GPU (opcional)
 - → Studio mode para grabación profesional
 
-### Versi\u00f3n 1.0.0
-- \u2192 Versi\u00f3n estable
-- \u2192 Instalador para todas las plataformas
-- \u2192 Community support
+### Versión 1.0.0
+- → Versión estable
+- → Instalador para todas las plataformas
+- → Community support
 
 ---
 
-## \u2764 Apoyo
+## ❤ Apoyo
 
 Si te gusta VoxForge Local, considera:
 
-- \u2605 Dar una estrella a este repositorio
-- \u2605 Reportar problemas o solicitar funcionalidades
-- \u2605 Contribuir con c\u00f3digo
-- \u2605 Compartir con otros desarrolladores
+- ★ Dar una estrella a este repositorio
+- ★ Reportar problemas o solicitar funcionalidades
+- ★ Contribuir con código
+- ★ Compartir con otros desarrolladores
 
 ---
 
-## \u24d2 Licencia
+## ⓒ Licencia
 
-Este proyecto est\u00e1 bajo la Licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m\u00e1s detalles.
+Este proyecto está bajo la Licencia MIT. Consulta el archivo [LICENSE](LICENSE) para más detalles.
 
 ---
 
-## \u2709 Contacto
+## ✉ Contacto
 
 Para preguntas o soporte, por favor abre un [Issue](https://github.com/tu-usuario/voxforge/issues) en el repositorio.
 
-**Nota:** Este proyecto es de c\u00f3digo abierto y no tiene soporte comercial.
+**Nota:** Este proyecto es de código abierto y no tiene soporte comercial.
 
 ---
 
-> \u2764 Hecho con amor para la comunidad de audio y voz \u2764
+> ❤ Hecho con amor para la comunidad de audio y voz ❤
