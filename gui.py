@@ -32,6 +32,7 @@ try:
         QTimer,
         QTranslator,
         QUrl,
+        Signal,
     )
     from PySide6.QtGui import (
         QColor,
@@ -804,6 +805,26 @@ class SpanishFileHeaders(QIdentityProxyModel):
         return super().headerData(section, orientation, role)
 
 
+class AudioAnalyzeThread(QThread):
+    """Lee y analiza una muestra de voz en un hilo de fondo para no bloquear la UI."""
+
+    finished = Signal(object)
+
+    def __init__(self, path: str | Path, parent=None):
+        super().__init__(parent)
+        self.path = str(path)
+
+    def run(self) -> None:  # type: ignore[override]
+        import soundfile as sf
+        from voxforge.audioqa import analyze
+
+        try:
+            audio, sr = sf.read(self.path, dtype="float32")
+            self.finished.emit(analyze(audio, sr))
+        except Exception:
+            self.finished.emit([])
+
+
 def pick_file(parent, caption: str, start: str, filter_text: str) -> str | None:
     """Explorador de archivos oscuro, en español y con cabeceras traducidas."""
     dialog = QFileDialog(parent, caption, start, filter_text)
@@ -1201,6 +1222,7 @@ class VoiceManagerDialog(QDialog):
         self._clone_timer = None
         self._clone_path: Path | None = None
         self._clone_log = ""
+        self._analyze_thread = None
         # Servicio de gestión de voces
         self.voice_service = VoiceManagerService(
             store=Store(self.db_path),
@@ -1445,13 +1467,40 @@ class VoiceManagerDialog(QDialog):
         used = self._usage.get(name, [])
         checks = self._qa_cache.get(name)
         if checks is None:
-            try:
-                audio, sr = sf.read(profile["ref_path"], dtype="float32")
-                checks = analyze(audio, sr)
-            except Exception:
-                checks = []
-            self._qa_cache[name] = checks
+            # Mostrar estado de análisis y lanzar en hilo de fondo
+            self.detail_verdict.setText("Analizando muestra…")
+            self.detail_verdict.setStyleSheet(f"color: {MUTED};")
+            self._clear_metrics()
+            self._analyze_thread = AudioAnalyzeThread(profile["ref_path"], self)
+            self._analyze_thread.finished.connect(
+                lambda result: self._on_voice_analyzed(name, result)
+            )
+            self._analyze_thread.start()
+            # badge/usage se actualizan en _on_voice_analyzed
+            suffix = " · EN USO" if used else ""
+            self.detail_badge.setText("ANALIZANDO" + suffix)
+            self.detail_badge.setObjectName("badgeInfo")
+            self.detail_badge.style().unpolish(self.detail_badge)
+            self.detail_badge.style().polish(self.detail_badge)
+            if used:
+                self.detail_usage.setText("Proyectos que la usan: " + ", ".join(used))
+            else:
+                self.detail_usage.setText("Ningún proyecto usa esta voz todavía.")
+            return
 
+        self._apply_voice_analysis(name, profile, checks, used)
+
+    def _on_voice_analyzed(self, name: str, checks: list) -> None:
+        """Callback cuando el hilo de fondo termina de analizar la muestra."""
+        self._qa_cache[name] = checks
+        profile = self._profiles.get(name)
+        if profile is None:
+            return
+        used = self._usage.get(name, [])
+        self._apply_voice_analysis(name, profile, checks, used)
+
+    def _apply_voice_analysis(self, name: str, profile: dict, checks: list, used: list[str]) -> None:
+        """Aplica el resultado del análisis de voz a la UI del detalle."""
         if checks:
             statuses = {c.status for c in checks}
             if "MAL" in statuses:
@@ -1476,9 +1525,7 @@ class VoiceManagerDialog(QDialog):
         self.detail_badge.style().polish(self.detail_badge)
 
         if used:
-            self.detail_usage.setText(
-                "Proyectos que la usan: " + ", ".join(used)
-            )
+            self.detail_usage.setText("Proyectos que la usan: " + ", ".join(used))
         else:
             self.detail_usage.setText("Ningún proyecto usa esta voz todavía.")
 
@@ -1708,6 +1755,10 @@ class VoiceManagerDialog(QDialog):
             self._clone_text.unlink(missing_ok=True)
             self._clone_text = None
         self._cancel_clone_timer()
+        if self._analyze_thread is not None:
+            self._analyze_thread.quit()
+            self._analyze_thread.wait(1000)
+            self._analyze_thread = None
         if self.preview_player:
             self.preview_player.stop()
         super().done(result)
@@ -1721,6 +1772,10 @@ class VoiceManagerDialog(QDialog):
             self._clone_text.unlink(missing_ok=True)
             self._clone_text = None
         self._cancel_clone_timer()
+        if self._analyze_thread is not None:
+            self._analyze_thread.quit()
+            self._analyze_thread.wait(1000)
+            self._analyze_thread = None
         if self.preview_player:
             self.preview_player.stop()
         super().closeEvent(event)
@@ -2193,7 +2248,8 @@ class VoxForgeGUI(QMainWindow):
 
         self.tail_timer = QTimer(self)
         self.tail_timer.timeout.connect(self._tick)
-        self.tail_timer.start(REFRESH_IDLE_MS)
+        self.tail_timer.setInterval(REFRESH_IDLE_MS)
+        self.tail_timer.start()
 
         self.fx_timer = QTimer(self)
         self.fx_timer.timeout.connect(self._fx_tick)
@@ -3144,7 +3200,25 @@ class VoxForgeGUI(QMainWindow):
         except Exception:
             active = []
         self._running = bool(active)
-        self.tail_timer.setInterval(REFRESH_RUNNING_MS if self._running else REFRESH_IDLE_MS)
+
+        # tail_timer: más frecuente si hay trabajo, detenido si está totalmente inactivo
+        if self._running:
+            self.tail_timer.setInterval(REFRESH_RUNNING_MS)
+            if not self.tail_timer.isActive():
+                self.tail_timer.start()
+        else:
+            self.tail_timer.setInterval(REFRESH_IDLE_MS * 4)
+            if not self.tail_timer.isActive():
+                self.tail_timer.start()
+
+        # _eta_timer: solo cuando hay un trabajo seleccionado y en curso
+        want_eta = self.selected_job_id is not None and self._job_start_time is not None and self._running
+        if want_eta and not self._eta_timer.isActive():
+            self._eta_timer.start()
+        elif not want_eta and self._eta_timer.isActive():
+            self._eta_timer.stop()
+
+        # fx_timer: solo animar si hay trabajo activo y animaciones habilitadas
         want_fx = ENABLE_ANIM and self._running
         if want_fx and not self.fx_timer.isActive():
             self.fx_timer.start()
