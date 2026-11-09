@@ -69,8 +69,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("VoxForge · Estudio de narración local")
-        self.resize(1400, 900)
-        self.setMinimumSize(1100, 700)
+        self.resize(1000, 700)
+        self.setMinimumSize(700, 500)
 
         self._build_ui()
         self._apply_theme()

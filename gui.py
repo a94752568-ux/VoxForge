@@ -380,7 +380,7 @@ class ImportBookDialog(QDialog):
         self.setWindowTitle("Importar libro")
         self.setModal(True)
         self.setAcceptDrops(True)
-        self.setMinimumWidth(620)
+        self.setMinimumWidth(480)
         self._file: Path | None = None
         self._auto_name = ""
         self._build(voices, default_voice)
@@ -588,7 +588,7 @@ class VoiceAddDialog(QDialog):
         self.setObjectName("voiceDialog")
         self.setWindowTitle("Añadir voz")
         self.setModal(True)
-        self.setMinimumWidth(560)
+        self.setMinimumWidth(480)
         self._existing = existing_names
         self._file: Path | None = None
         self._auto_name = ""
@@ -735,7 +735,7 @@ class VoiceManagerDialog(QDialog):
         self.setObjectName("voiceDialog")
         self.setWindowTitle("Gestión de voces")
         self.setModal(True)
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(700, 500)
         self.db_path = db_path
         self.data_dir = data_dir
         self._profiles: dict[str, dict] = {}
@@ -1317,7 +1317,7 @@ class ChapterEditorDialog(QDialog):
         self.setObjectName("editorDialog")
         self.setWindowTitle(f"Editar capítulo · {project}")
         self.setModal(True)
-        self.setMinimumSize(920, 620)
+        self.setMinimumSize(700, 500)
         self.project = project
         self.ordinal = int(chapter["ordinal"])
         self.settings = settings
@@ -1705,7 +1705,7 @@ class VoxForgeGUI(QMainWindow):
         self._drag_threshold = 6  # px de tolerancia antes de empezar a arrastrar
         
         self.setWindowTitle("VoxForge · Estudio de narración local")
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(700, 500)
         
         # Añadir botones de control personalizados
         self._setup_window_controls()
@@ -2041,8 +2041,8 @@ class VoxForgeGUI(QMainWindow):
         side = QFrame()
         side.setObjectName("sidebar")
         side.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        side.setMinimumWidth(200)
-        side.setMaximumWidth(350)
+        side.setMinimumWidth(160)
+        side.setMaximumWidth(400)
 
         lay = QVBoxLayout(side)
         lay.setContentsMargins(14, 16, 14, 12)
@@ -2403,8 +2403,8 @@ class VoxForgeGUI(QMainWindow):
         self.frag_search.setObjectName("search")
         self.frag_search.setPlaceholderText("Buscar en el capítulo…")
         self.frag_search.setClearButtonEnabled(True)
-        self.frag_search.setMinimumWidth(130)
-        self.frag_search.setMaximumWidth(220)
+        self.frag_search.setMinimumWidth(100)
+        self.frag_search.setMaximumWidth(200)
         self.btn_reload = self._btn(
             "↻", "icon", "Volver a trocear el capítulo (tras editar el diccionario)"
         )
@@ -2574,7 +2574,7 @@ class VoxForgeGUI(QMainWindow):
     def _build_player_bar(self) -> QFrame:
         bar = QFrame()
         bar.setObjectName("playerBar")
-        bar.setMinimumHeight(72)
+        bar.setMinimumHeight(60)
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(14, 10, 14, 10)
         lay.setSpacing(12)
