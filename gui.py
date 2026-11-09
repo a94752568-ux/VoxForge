@@ -157,6 +157,46 @@ ROLE_NUMBER = ROLE_ID + 5
 ROLE_ACCENT = ROLE_ID + 6
 
 
+class EmptyList(QListWidget):
+    """Lista con un mensaje de estado vacío dibujado dentro."""
+
+    def __init__(self, placeholder: str = "", parent=None):
+        super().__init__(parent)
+        self.placeholder = placeholder
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+
+    def setPlaceholder(self, text: str) -> None:
+        self.placeholder = text
+        self.viewport().update()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        super().paintEvent(event)
+        if self.count() == 0 and self.placeholder:
+            from PySide6.QtGui import QPainter, QColor
+            from PySide6.QtCore import Qt as _Qt
+
+            painter = QPainter(self.viewport())
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setPen(QColor(MUTED))
+            font = self.font()
+            font.setPixelSize(11)
+            painter.setFont(font)
+            rect = self.viewport().rect()
+            painter.drawText(
+                rect,
+                _Qt.AlignmentFlag.AlignCenter | _Qt.AlignmentFlag.AlignVCenter,
+                self.placeholder,
+            )
+            painter.end()
+
+
 class CardDelegate(QStyledItemDelegate):
     """Dibuja cada fila como una tarjeta con título, subtítulo y chip de estado."""
 
