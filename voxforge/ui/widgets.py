@@ -238,14 +238,18 @@ class PulseChip(QFrame):
         )
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # WAVEFORM WIDGET
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class WaveformWidget(QWidget):
     """
-    Widget que dibuja una onda de audio animada.
-    Se utiliza para mostrar actividad de reproducción o narración en tiempo real.
+    Widget que dibuja una onda de audio.
+
+    Puede mostrar:
+    - Datos de audio reales (set_audio_data) con el contorno de la forma de onda.
+    - Una onda senoide animada ficticia cuando no hay datos pero está activa
+      (modo reproducción/narración sin forma de onda disponible).
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -256,6 +260,7 @@ class WaveformWidget(QWidget):
 
         self._phase = 0.0
         self._active = False
+        self._samples: list[float] | None = None
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._advance_phase)
         self._timer.setInterval(50)  # 20 FPS
@@ -273,6 +278,11 @@ class WaveformWidget(QWidget):
         self._phase = 0.0
         self.update()
 
+    def set_audio_data(self, samples: list[float] | None) -> None:
+        """Establece los datos de forma de onda reales (valores entre -1 y 1)."""
+        self._samples = samples
+        self.update()
+
     def _advance_phase(self) -> None:
         self._phase += 0.15
         if self._phase > 2 * math.pi:
@@ -288,27 +298,40 @@ class WaveformWidget(QWidget):
 
         rect = self.rect()
         center_y = rect.height() / 2
-        amplitude = rect.height() / 3 if self._active else rect.height() / 6
-
-        path = QPainterPath()
-        path.moveTo(0, center_y)
-
         width = rect.width()
-        samples = 60
-        for i in range(samples + 1):
-            x = (i / samples) * width
-            # Onda senoidal con desfasado por posición
-            y_offset = math.sin((i / samples) * 4 * math.pi + self._phase)
-            y = center_y - y_offset * amplitude
-            if i == 0:
-                path.moveTo(x, y)
-            else:
-                path.lineTo(x, y)
 
         # Gradiente para la onda
         grad = QLinearGradient(QPointF(0, 0), QPointF(0, rect.height()))
         grad.setColorAt(0, QColor(CYAN))
         grad.setColorAt(1, QColor(MAGENTA))
+
+        path = QPainterPath()
+        path.moveTo(0, center_y)
+
+        if self._samples:
+            # Dibujar forma de onda real normalizada al alto del widget
+            n = len(self._samples)
+            step = width / max(n - 1, 1)
+            amplitude = rect.height() / 3 if self._active else rect.height() / 6
+            for i, sample in enumerate(self._samples):
+                x = i * step
+                y = center_y - sample * amplitude
+                if i == 0:
+                    path.moveTo(x, y)
+                else:
+                    path.lineTo(x, y)
+        else:
+            # Onda senoidal animada cuando no hay datos reales
+            amplitude = rect.height() / 3 if self._active else rect.height() / 6
+            samples_count = 60
+            for i in range(samples_count + 1):
+                x = (i / samples_count) * width
+                y_offset = math.sin((i / samples_count) * 4 * math.pi + self._phase)
+                y = center_y - y_offset * amplitude
+                if i == 0:
+                    path.moveTo(x, y)
+                else:
+                    path.lineTo(x, y)
 
         painter.setPen(QPen(grad, 2.5))
         painter.drawPath(path)
@@ -319,7 +342,6 @@ class WaveformWidget(QWidget):
         glow_pen.setCosmetic(True)
         painter.setPen(glow_pen)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        # Dibujar una versión más tenue detrás para simular glow
         painter.drawPath(path)
 
         painter.end()
