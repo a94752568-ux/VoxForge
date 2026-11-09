@@ -140,7 +140,7 @@ IMPORT_FILTER = "Libros (*.txt *.md *.docx *.epub *.pdf);;Todos los archivos (*)
 VOICE_EXTS = {".wav", ".flac", ".mp3", ".ogg", ".oga", ".m4a", ".aac", ".opus"}
 VOICE_FILTER = "Audio (*.wav *.flac *.mp3 *.ogg *.oga *.m4a *.aac *.opus);;Todos los archivos (*)"
 
-from voxforge.ui.theme import QSS
+from voxforge.ui.theme import QSS, CYAN, PURPLE, MUTED, MAGENTA
 
 
 
