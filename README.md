@@ -40,7 +40,26 @@
 
 ## ⌈ Instalación
 
-### Opción 1: Instalación con pipx (Recomendado)
+### Opción 1: Instalador automático (Recomendado)
+
+Usa `install.sh` para detectar automáticamente tu hardware, instalar dependencias del sistema, crear el entorno virtual y configurar todo:
+
+```bash
+# Clonar el repositorio
+git clone https://github.com/a94752568-ux/VoxForge.git
+cd VoxForge
+
+# Hacer ejecutable y correr el instalador
+chmod +x install.sh
+./install.sh
+```
+
+El instalador detecta:
+- **Sistema operativo:** Linux (Debian/Ubuntu, Fedora, Arch), macOS, Windows
+- **Hardware:** CPU, RAM, GPU (NVIDIA/AMD/Intel) para optimizar el rendimiento
+- **Dependencias:** Python 3.10+, ffmpeg, libsndfile, tesseract-ocr y librerías gráficas
+
+### Opción 2: Instalación con pipx
 
 ```bash
 # Instalar pipx (si no lo tienes)
@@ -48,8 +67,8 @@ python -m pip install --user pipx
 python -m pipx ensurepath
 
 # Clonar el repositorio
-git clone https://github.com/tu-usuario/voxforge.git
-cd voxforge
+git clone https://github.com/a94752568-ux/VoxForge.git
+cd VoxForge
 
 # Instalar en modo editable
 pipx install -e .
@@ -58,12 +77,12 @@ pipx install -e .
 pipx install .
 ```
 
-### Opción 2: Instalación con pip
+### Opción 3: Instalación con pip
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/tu-usuario/voxforge.git
-cd voxforge
+git clone https://github.com/a94752568-ux/VoxForge.git
+cd VoxForge
 
 # Crear entorno virtual
 python -m venv .venv
@@ -77,11 +96,19 @@ pip install -e .
 pip install -r requirements.txt
 ```
 
-### Opción 3: Descarga de modelos
+### Opción 4: Descarga de modelos
 
 Los modelos de XTTS-v2 se descargan automáticamente la primera vez que los usas:
 
 ```bash
+voxforge model download
+```
+
+O para precargarlos ahora:
+
+```bash
+./install.sh  # pregunta si quieres descargar los modelos
+# o directamente
 voxforge model download
 ```
 
@@ -433,7 +460,7 @@ Este proyecto está bajo la Licencia MIT. Consulta el archivo [LICENSE](LICENSE)
 
 ## ✉ Contacto
 
-Para preguntas o soporte, por favor abre un [Issue](https://github.com/tu-usuario/voxforge/issues) en el repositorio.
+Para preguntas o soporte, por favor abre un [Issue](https://github.com/a94752568-ux/VoxForge/issues) en el repositorio.
 
 **Nota:** Este proyecto es de código abierto y no tiene soporte comercial.
 
