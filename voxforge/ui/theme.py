@@ -5,28 +5,74 @@ Estilo cyberpunk: fondo profundo #05060F, paneles #0B0F22 / #0D1226,
 acento cian #00F0FF, magenta #FF2A6D, morado #B967FF, ámbar #FFB000,
 verde #00FF9C, texto #D6E6FF, tenue #7A8DB5.
 
+Soporta múltiples temas seleccionables en runtime.
+
 Solo PySide6 + stdlib. Sin dependencias externas. 100% offline.
 """
 
 from __future__ import annotations
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PALETA CYBERPUNK / NIGHT CITY
+# PALETAS DE TEMA
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-BG = "#05060F"          # Fondo principal (casi negro azulado)
-PANEL = "#0B0F22"       # Paneles principales
-PANEL_2 = "#0D1226"     # Paneles secundarios (ligeramente más claros)
-PANEL_3 = "#151B33"     # Tarjetas / contenedores internos
+PALETTES: dict[str, dict[str, str]] = {
+    "night_city": {
+        "bg": "#05060F",
+        "panel": "#0B0F22",
+        "panel2": "#0D1226",
+        "panel3": "#151B33",
+        "cyan": "#00F0FF",
+        "magenta": "#FF2A6D",
+        "purple": "#B967FF",
+        "amber": "#FFB000",
+        "green": "#00FF9C",
+        "text": "#D6E6FF",
+        "muted": "#7A8DB5",
+        "dark": "#02040A",
+    },
+    "nova": {
+        "bg": "#0a0a0f",
+        "panel": "#12121a",
+        "panel2": "#1a1a25",
+        "panel3": "#202030",
+        "cyan": "#00ffff",
+        "magenta": "#ff33cc",
+        "purple": "#8a2be2",
+        "amber": "#ffaa00",
+        "green": "#00ff88",
+        "text": "#e0e0ff",
+        "muted": "#a0a0d0",
+        "dark": "#06131d",
+    },
+}
 
-CYAN = "#00F0FF"        # Acento principal cian neón
-MAGENTA = "#FF2A6D"     # Acento secundario magenta
-PURPLE = "#B967FF"      # Morado neón
-AMBER = "#FFB000"       # Ámbar / advertencia
-GREEN = "#00FF9C"       # Verde éxito / activo
-TEXT = "#D6E6FF"        # Texto principal
-MUTED = "#7A8DB5"       # Texto tenue / secundario
-DARK = "#02040A"        # Sombras profundas
+DEFAULT_THEME = "night_city"
+
+
+def _palette(theme_name: str | None = None) -> dict[str, str]:
+    """Devuelve el diccionario de colores del tema solicitado."""
+    name = theme_name or DEFAULT_THEME
+    return PALETTES.get(name, PALETTES[DEFAULT_THEME])
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Constantes de tema por defecto (mantenidas para compatibilidad)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_P = _palette()
+BG = _P["bg"]
+PANEL = _P["panel"]
+PANEL_2 = _P["panel2"]
+PANEL_3 = _P["panel3"]
+CYAN = _P["cyan"]
+MAGENTA = _P["magenta"]
+PURPLE = _P["purple"]
+AMBER = _P["amber"]
+GREEN = _P["green"]
+TEXT = _P["text"]
+MUTED = _P["muted"]
+DARK = _P["dark"]
 
 # Colores de estado
 STATUS_OK = GREEN
@@ -433,31 +479,48 @@ QMenu::separator {{
 """
 
 
-def _build_qss() -> str:
-    """Construye el QSS final reemplazando placeholders por colores reales."""
+def _build_qss(palette: dict[str, str] | None = None) -> str:
+    """Construye el QSS final reemplazando placeholders por colores reales.
+
+    Args:
+        palette: Diccionario de colores. Si es None, usa la paleta por defecto.
+    """
+    p = palette or _palette()
     qss = _QSS_TEMPLATE
     replacements = {
-        "__BG__": BG,
-        "__PANEL__": PANEL,
-        "__PANEL_2__": PANEL_2,
-        "__PANEL_3__": PANEL_3,
-        "__CYAN__": CYAN,
-        "__MAGENTA__": MAGENTA,
-        "__PURPLE__": PURPLE,
-        "__AMBER__": AMBER,
-        "__GREEN__": GREEN,
-        "__TEXT__": TEXT,
-        "__MUTED__": MUTED,
-        "__DARK__": DARK,
+        "__BG__": p["bg"],
+        "__PANEL__": p["panel"],
+        "__PANEL_2__": p["panel2"],
+        "__PANEL_3__": p["panel3"],
+        "__CYAN__": p["cyan"],
+        "__MAGENTA__": p["magenta"],
+        "__PURPLE__": p["purple"],
+        "__AMBER__": p["amber"],
+        "__GREEN__": p["green"],
+        "__TEXT__": p["text"],
+        "__MUTED__": p["muted"],
+        "__DARK__": p["dark"],
     }
     for key, value in replacements.items():
         qss = qss.replace(key, value)
     return qss
 
 
+def get_qss(theme_name: str | None = None) -> str:
+    """Devuelve el QSS del tema solicitado."""
+    return _build_qss(_palette(theme_name))
+
+
+def apply_theme(app, theme_name: str) -> None:
+    """Aplica un tema a la aplicación QApplication."""
+    if theme_name not in PALETTES:
+        return
+    app.setStyleSheet(get_qss(theme_name))
+
+
 QSS = _build_qss()
 
-# Paleta exportada para uso en código Python
+# Paleta exportada para uso en código Python (tema actual por defecto)
 PALETTE = {
     "bg": BG,
     "panel": PANEL,
@@ -477,7 +540,8 @@ PALETTE = {
     "idle": STATUS_IDLE,
 }
 
-__all__ = ["QSS", "PALETTE", "BG", "PANEL", "PANEL_2", "PANEL_3",
-           "CYAN", "MAGENTA", "PURPLE", "AMBER", "GREEN",
-           "TEXT", "MUTED", "DARK",
-           "STATUS_OK", "STATUS_WARN", "STATUS_ERROR", "STATUS_IDLE"]
+__all__ = ["QSS", "PALETTE", "PALETTES", "DEFAULT_THEME", "BG", "PANEL",
+           "PANEL_2", "PANEL_3", "CYAN", "MAGENTA", "PURPLE", "AMBER",
+           "GREEN", "TEXT", "MUTED", "DARK",
+           "STATUS_OK", "STATUS_WARN", "STATUS_ERROR", "STATUS_IDLE",
+           "get_qss", "apply_theme"]

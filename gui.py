@@ -139,71 +139,6 @@ IMPORT_FILTER = "Libros (*.txt *.md *.docx *.epub *.pdf);;Todos los archivos (*)
 VOICE_EXTS = {".wav", ".flac", ".mp3", ".ogg", ".oga", ".m4a", ".aac", ".opus"}
 VOICE_FILTER = "Audio (*.wav *.flac *.mp3 *.ogg *.oga *.m4a *.aac *.opus);;Todos los archivos (*)"
 
-# =============================================================================
-# NOVA PREMIUM THEME - Cyberpunk-inspired theme
-# =============================================================================
-# 
-# NOVA Premium Theme for VoxForge Local
-# Cyberpunk-inspired professional theme with electric blue accents
-# Inspired by NOVA Cognitive Operations System
-#
-# Enable NOVA theme by setting THEME = "nova" below
-# Default: "aurora" (original theme)
-# =============================================================================
-
-# Theme selector
-THEME = "nova"  # Options: "nova", "aurora"
-
-if THEME == "nova":
-    # =========================================================================
-    # NOVA Premium Theme - Cyberpunk with electric blue accents
-    # =========================================================================
-    # Primary Colors
-    BG = "#0a0a0f"           # Deep space black
-    SURFACE = "#12121a"       # Dark background
-    SURFACE_2 = "#1a1a25"     # Card/panel background
-    SURFACE_3 = "#202030"     # Elevated surfaces
-    BORDER = "#2a2a40"       # Primary border
-    BORDER_SOFT = "#202030"  # Soft border
-    TEXT = "#e0e0ff"         # Primary text (soft white)
-    MUTED = "#a0a0d0"        # Secondary text
-    DIM = "#606090"          # Muted text
-    
-    # Accent Colors (Electric Blue/Cyan - NOVA signature)
-    CYAN = "#00ffff"         # ✨ Primary accent - Electric cyan
-    BLUE = "#00b4ff"         # Secondary blue
-    MAGENTA = "#ff33cc"      # Magenta for variety
-    PURPLE = "#8a2be2"       # Purple accent
-    GREEN = "#00ff88"        # Success green
-    AMBER = "#ffaa00"        # Warning amber
-    RED = "#ff3366"          # Error red
-
-else:
-    # =========================================================================
-    # Aurora Theme - Original VoxForge theme
-    # =========================================================================
-    # Paleta «Nova Cyberpunk»: superficies oscuras, acento cian-neón y magenta.
-    # Colores vibrantes de estilo cyberpunk con gradientes profundos.
-    # =========================================================================
-    BG = "#050a14"
-    SURFACE = "#0b1324"
-    SURFACE_2 = "#111c30"
-    SURFACE_3 = "#182640"
-    BORDER = "#1e3a5f"
-    BORDER_SOFT = "#121e34"
-    TEXT = "#e2f4ff"
-    MUTED = "#8fb3d9"
-    DIM = "#5c7a9e"
-
-    CYAN = "#00f3ff"
-    CYAN_DIM = "#2a9d8f"
-    BLUE = "#3b82f6"
-    MAGENTA = "#ff00ff"
-    PURPLE = "#bc13fe"
-    GREEN = "#22ff88"
-    AMBER = "#ffd166"
-    RED = "#ff4d6d"
-    PINK = "#ff6b9d"
 from voxforge.ui.theme import QSS
 
 
@@ -1806,6 +1741,7 @@ class VoxForgeGUI(QMainWindow):
         self.selected_fragment: int | None = None
         self.show_all_exports = False
         self.now_playing: Path | None = None
+        self._current_theme: str = self.settings.get("theme", DEFAULT_THEME)
 
         self._projects: dict = {}
         self._chapters: dict = {}
@@ -2337,8 +2273,30 @@ class VoxForgeGUI(QMainWindow):
         self.act_cancel = menu.addAction("Cancelar trabajo", self.action_cancel)
         self.act_cleanup = menu.addAction("Limpiar trabajos terminados", self.action_cleanup)
         menu.addSeparator()
+        # Selector de tema
+        theme_menu = menu.addMenu("Tema")
+        for theme_name in ("night_city", "nova"):
+            action = theme_menu.addAction(theme_name.replace("_", " ").title())
+            action.setCheckable(True)
+            action.setChecked(theme_name == self._current_theme)
+            action.triggered.connect(lambda _, t=theme_name: self.apply_theme(t))
+        menu.addSeparator()
         self.act_delete = menu.addAction("Borrar proyecto…", self.action_delete_project)
         return menu
+
+    def apply_theme(self, theme_name: str) -> None:
+        """Cambia el tema de la aplicación en runtime y persiste la elección."""
+        from voxforge.ui.theme import apply_theme as _apply_theme, PALETTES
+        if theme_name not in PALETTES:
+            return
+        _apply_theme(QApplication.instance(), theme_name)
+        self._current_theme = theme_name
+        try:
+            self.settings.set("theme", theme_name)
+        except Exception:
+            pass
+        # Forzar actualización del menú de tema
+        self.menu().update()
 
     # ------------------------------------------------------------------ #
     # Contenido principal                                                 #
@@ -4329,28 +4287,17 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
-    # Apply NOVA theme if requested (from command line or THEME variable)
-    # Priority: command line > THEME variable > default QSS
-    use_nova_theme = False
-    if len(sys.argv) > 1 and any(arg in ("--nova", "--nova-theme") for arg in sys.argv[1:]):
-        use_nova_theme = True
-    elif THEME == "nova":
-        # Check if we can import the nova theme
-        try:
-            from voxforge.themes import apply_nova_theme
-            use_nova_theme = True
-        except ImportError:
-            pass  # Fall back to built-in QSS
-    
-    if use_nova_theme:
-        try:
-            from voxforge.themes import apply_nova_theme
-            apply_nova_theme(app)
-        except ImportError:
-            # If nova theme is not available, use the built-in NOVA colors
-            app.setStyleSheet(QSS)
-    else:
-        app.setStyleSheet(QSS)
+    # Aplicar tema (prioridad: argumento CLI > settings guardado > default)
+    from voxforge.ui.theme import get_qss, DEFAULT_THEME
+    cli_theme = None
+    if len(sys.argv) > 1:
+        for arg in sys.argv[1:]:
+            if arg in ("--night-city", "--theme-night-city"):
+                cli_theme = "night_city"
+            elif arg in ("--nova", "--theme-nova"):
+                cli_theme = "nova"
+    initial_theme = cli_theme or DEFAULT_THEME
+    app.setStyleSheet(get_qss(initial_theme))
     
     translations = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
     app._translators = []
