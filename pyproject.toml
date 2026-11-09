@@ -1,0 +1,138 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voxforge"
+version = "0.6.0"
+description = "Estudio de clonación de voz y narración 100% local/offline en Python"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "VoxForge Team", email = "contact@voxforge.local"}
+]
+keywords = [
+    "tts",
+    "text-to-speech",
+    "voice-cloning",
+    "audiobooks",
+    "narration",
+    "offline",
+    "local",
+    "coqui-xtts",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Text Processing :: Linguistic",
+]
+dependencies = [
+    # Core dependencies
+    "coqui-tts>=0.28.0",
+    "librosa>=1.0.0",
+    "soundfile>=0.14.0",
+    
+    # Audio processing
+    "pydub>=2.5.0",
+    "pyloudnorm>=0.1.0",
+    
+    # GUI
+    "PySide6>=6.12.0",
+    "PySide6-Addons>=6.12.0",
+    
+    # PDF and document processing
+    "pymupdf>=2.0",
+    "pytesseract>=0.3.13",
+    "python-docx>=1.1.0",
+    "ebooklib>=0.17",
+    
+    # Utility
+    "tqdm>=4.70.0",
+    "requests>=2.34.0",
+    "click>=8.5.0",
+    "platformdirs>=4.14.0",
+    "psutil>=7.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.10.0",
+    "ruff>=0.3.0",
+    "black>=24.0.0",
+]
+
+[project.scripts]
+voxforge = "voxforge.cli:main"
+voxforge-gui = "gui:main"
+
+[project.gui-scripts]
+voxforge-gui = "gui:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["voxforge*", "gui"]
+
+[tool.setuptools.package-data]
+# Package data for voxforge
+voxforge = [
+    "data/*",
+    "models/*",
+    "i18n/locales/*/LC_MESSAGES/*.mo",
+    "i18n/locales/*/LC_MESSAGES/*.po",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+    | \.venv
+    | build
+    | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

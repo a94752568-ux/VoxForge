@@ -1,0 +1,84 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: VoxForge Local 0.6.0\n"
+"POT-Creation-Date: 2024-11-06 00:00+0000\n"
+"PO-Revision-Date: 2024-11-06 00:00+0000\n"
+"Last-Translator: VoxForge Team\n"
+"Language-Team: French\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: voxforge/cli.py
+msgid "VoxForge Local: voz clonada 100% local"
+msgstr "VoxForge Local : clonage vocal 100% local"
+
+#: voxforge/cli.py
+msgid "estudio de clonación de voz"
+msgstr "studio de clonage vocal"
+
+#: voxforge/cli.py
+msgid "estado"
+msgstr "état"
+
+#: voxforge/cli.py
+msgid "gestionar trabajos de producción en segundo plano"
+msgstr "gérer les tâches de production en arrière-plan"
+
+#: voxforge/cli.py
+msgid "gestionar perfiles de voz"
+msgstr "gérer les profils vocaux"
+
+#: voxforge/cli.py
+msgid "gestionar proyectos y capítulos"
+msgstr "gérer les projets et les chapitres"
+
+#: voxforge/cli.py
+msgid "gestionar la caché"
+msgstr "gérer le cache"
+
+#: voxforge/cli.py
+msgid "mostrar estadísticas de la caché"
+msgstr "afficher les statistiques du cache"
+
+#: voxforge/cli.py
+msgid "limpiar la caché"
+msgstr "nettoyer le cache"
+
+#: voxforge/cli.py
+msgid "Estadísticas de caché:"
+msgstr "Statistiques du cache :"
+
+#: voxforge/cli.py
+msgid "Limpieza completada:"
+msgstr "Nettoyage terminé :"
+
+#: voxforge/cli.py
+msgid "SIMULACIÓN"
+msgstr "SIMULATION"
+
+#: voxforge/cli.py
+msgid "Usa el comando sin --dry-run para ejecutar la limpieza."
+msgstr "Utilisez la commande sans --dry-run pour exécuter le nettoyage."
+
+#: voxforge/cli.py
+msgid "Error: "
+msgstr "Erreur : "
+
+#: voxforge/cli.py
+msgid "Proyecto creado: "
+msgstr "Projet créé : "
+
+#: voxforge/cli.py
+msgid "Narración cancelada"
+msgstr "Narration annulée"
+
+#: voxforge/cli.py
+msgid "Narración completada"
+msgstr "Narration terminée"
+
+#: voxforge/cli.py
+msgid "Audio exportado correctamente"
+msgstr "Audio exporté avec succès"

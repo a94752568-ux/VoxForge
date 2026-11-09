@@ -1,0 +1,1416 @@
+"""Línea de comandos de VoxForge Local."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import re
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import datetime
+from pathlib import Path
+
+import soundfile as sf
+
+from .importers import extract_text, ImporterError, PDF_EXTS
+from .pronunciation import PronunciationError, load_pronunciation
+from .textutil import split_text
+
+from . import __version__
+from . import recorder
+from .prepare import PrepareError, prepare
+from .similarity import compare
+from .audioqa import analyze, format_report, room_noise
+from .config import home, load_settings
+from .db import Store
+from .thermal import cpu_temp_c
+from .voice_delete import delete_voice, ProfileNotFound
+from .projects import (
+    add_chapter,
+    ChapterNotFound,
+    create_project,
+    delete_project,
+    get_chapter,
+    get_project,
+    list_chapters,
+    list_chapters_full,
+    list_projects,
+    ProjectError,
+    ProjectNotFound,
+)
+
+_NAME_RE = re.compile(r"^[\w-]+$")
+
+READING_TEXT = (
+    "Cuando amanece en la costa, el mar parece una hoja de papel recién planchada. "
+    "Los pescadores preparan las redes mientras hablan de la marea, del viento y de lo caro "
+    "que está todo. ¿Quién diría que una mañana tan simple podría guardar tantas historias? "
+    "Yo prefiero caminar despacio, respirar hondo y escuchar cómo las gaviotas discuten con las olas."
+)
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _convert_to_wav24(src: Path, dest: Path) -> str | None:
+    """Convierte a WAV mono 24 kHz con ffmpeg. Devuelve None si va bien, o el error."""
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-ac", "1", "-ar", "24000", str(dest)],
+        capture_output=True,
+        text=True,
+    )
+    return None if result.returncode == 0 else result.stderr
+
+
+def _summary(checks) -> str:
+    values = {c.name: c.value for c in checks}
+    return (
+        f"duración {values['Duración']} | "
+        f"ruido {values.get('Ruido de fondo', 'n/d')} | "
+        f"señal/ruido {values.get('Relación señal/ruido', 'n/d')}"
+    )
+
+
+def _load_mono24(path: Path):
+    """Lee cualquier audio como mono 24 kHz float32 vía ffmpeg. Devuelve (audio, sr) o (None, error)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        converted = Path(tmp) / "audio.wav"
+        error = _convert_to_wav24(path, converted)
+        if error:
+            return None, error
+        audio, sr = sf.read(converted, dtype="float32")
+    return audio, sr
+
+
+def _slug(text: str) -> str:
+    s = re.sub(r"[^\w]+", "_", text.strip().lower(), flags=re.UNICODE)
+    return re.sub(r"_+", "_", s).strip("_")[:60] or "capitulo"
+
+
+def _resolve_project_profile(store, project_name: str, data_dir: Path):
+    """Devuelve (perfil_dict, language_proyecto) o SystemExit con mensaje claro."""
+    p = get_project(data_dir / "voxforge.db", project_name)
+    profile = store.get_profile(p["voice_profile"])
+    if profile is None:
+        print(
+            f"El proyecto '{project_name}' apunta a la voz '{p['voice_profile']}', "
+            "que ya no existe. Crea el perfil o edita el proyecto.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    return profile, p["language"]
+
+
+# --------------------------------------------------------------------------- #
+# Helpers de pronunciación                                                     #
+# --------------------------------------------------------------------------- #
+
+def _add_pron_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--pronunciation",
+        help="ruta del diccionario JSON (por defecto data/pronunciation.json si existe)",
+    )
+    parser.add_argument(
+        "--pron-lang",
+        help="packs separados por comas, p. ej. base,nah,zh,en,hi,fr",
+    )
+    parser.add_argument(
+        "--no-pronunciation",
+        action="store_true",
+        help="no aplicar diccionario de pronunciación",
+    )
+
+
+def _parse_pron_langs(value: str | None) -> list[str] | None:
+    if not value:
+        return None
+    return [x.strip() for x in value.split(",") if x.strip()]
+
+
+def _load_pron_config(args, data_dir: Path):
+    if getattr(args, "no_pronunciation", False):
+        return None, None
+
+    explicit = getattr(args, "pronunciation", None)
+    path = Path(explicit).expanduser() if explicit else data_dir / "pronunciation.json"
+
+    try:
+        cfg = load_pronunciation(path, required=bool(explicit))
+    except PronunciationError as exc:
+        print(f"Error de diccionario: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+    langs = _parse_pron_langs(getattr(args, "pron_lang", None))
+    return cfg, langs
+
+
+def _apply_pronunciation(text: str, cfg, langs, *, log=print) -> str:
+    if cfg is None:
+        return text
+    try:
+        out = cfg.apply(text, langs)
+    except PronunciationError as exc:
+        print(f"Error de diccionario: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    if out != text:
+        log("Diccionario de pronunciación aplicado.")
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# status                                                                       #
+# --------------------------------------------------------------------------- #
+
+def cmd_status(args, data_dir, settings, store) -> int:
+    temp = cpu_temp_c()
+    print(f"VoxForge Local {__version__}")
+    print(f"Datos: {data_dir}")
+    print(f"Temperatura CPU: {f'{temp:.0f} °C' if temp is not None else 'sin sensor'}")
+    print(
+        f"Perfiles de voz: {len(store.list_profiles())} | "
+        f"Fragmentos en caché: {store.fragment_count()}"
+    )
+    if settings.thermal_guard:
+        print(
+            f"Guardia térmica: activa (pausa a {settings.temp_pause_c:.0f} °C, "
+            f"reanuda a {settings.temp_resume_c:.0f} °C)"
+        )
+    else:
+        print("Guardia térmica: desactivada")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# voice                                                                        #
+# --------------------------------------------------------------------------- #
+
+def cmd_voice_add(args, data_dir, settings, store) -> int:
+    if not _NAME_RE.match(args.name):
+        print("El nombre solo puede tener letras, números, guiones y guion bajo.", file=sys.stderr)
+        return 2
+
+    src = Path(args.wav).expanduser()
+    if not src.is_file():
+        print(f"No existe el archivo: {src}", file=sys.stderr)
+        return 2
+
+    if store.get_profile(args.name):
+        print(f"Ya existe un perfil llamado '{args.name}'.", file=sys.stderr)
+        return 2
+
+    dest_dir = data_dir / "voices" / args.name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "ref.wav"
+
+    error = _convert_to_wav24(src, dest)
+    if error:
+        print(f"ffmpeg no pudo convertir la muestra:\n{error}", file=sys.stderr)
+        return 1
+
+    seconds = sf.info(dest).duration
+    audio, sr = sf.read(dest, dtype="float32")
+    print(format_report(analyze(audio, sr)))
+
+    store.add_profile(args.name, dest, _sha256(dest), args.language or settings.language)
+    print(f"Perfil '{args.name}' creado ({seconds:.1f} s de muestra).")
+    return 0
+
+
+def cmd_voice_check(args, data_dir, settings, store) -> int:
+    if bool(args.wav) == bool(args.profile):
+        print("Indica un archivo o --profile NOMBRE (solo uno de los dos).", file=sys.stderr)
+        return 2
+
+    if args.profile:
+        profile = store.get_profile(args.profile)
+        if profile is None:
+            print(f"No existe el perfil '{args.profile}'.", file=sys.stderr)
+            return 2
+        audio, sr = sf.read(profile["ref_path"], dtype="float32")
+        print(f"Muestra del perfil '{args.profile}':")
+    else:
+        src = Path(args.wav).expanduser()
+        if not src.is_file():
+            print(f"No existe el archivo: {src}", file=sys.stderr)
+            return 2
+        with tempfile.TemporaryDirectory() as tmp:
+            converted = Path(tmp) / "muestra.wav"
+            error = _convert_to_wav24(src, converted)
+            if error:
+                print(f"ffmpeg no pudo leer el archivo:\n{error}", file=sys.stderr)
+                return 1
+            audio, sr = sf.read(converted, dtype="float32")
+        print(f"Muestra {src}:")
+
+    print(format_report(analyze(audio, sr)))
+    return 0
+
+
+def cmd_voice_record(args, data_dir, settings, store) -> int:
+    if not _NAME_RE.match(args.name):
+        print("El nombre solo puede tener letras, números, guiones y guion bajo.", file=sys.stderr)
+        return 2
+
+    in_args = recorder.input_args(args.source)
+    samples_dir = data_dir / "samples"
+    samples_dir.mkdir(parents=True, exist_ok=True)
+    out = samples_dir / f"{args.name}_{datetime.now():%Y%m%d_%H%M%S}.wav"
+
+    print("Consejos: sala silenciosa (sin ventiladores), a unos 15 cm del micrófono, tono natural.")
+    print("Lee en voz alta este texto (unos 25 s) y pulsa Enter al terminar:\n")
+    print(f"  {READING_TEXT}\n")
+
+    try:
+        if not args.skip_room_check:
+            input("Pulsa Enter y guarda SILENCIO 3 segundos para medir el ruido de la sala... ")
+            with tempfile.TemporaryDirectory() as tmp:
+                room = Path(tmp) / "sala.wav"
+                recorder.record_fixed(in_args, room, 3)
+                audio, _ = sf.read(room, dtype="float32")
+            check = room_noise(audio)
+            print(
+                f"  {check.name}: {check.value}  {check.status}"
+                + (f"  -> {check.advice}" if check.advice else "")
+            )
+            if check.status == "MAL" and input(
+                "El ambiente no es bueno. ¿Grabar de todos modos? [s/N] "
+            ).strip().lower() not in ("s", "si", "sí"):
+                print("Cancelado: mejora el ambiente y vuelve a intentarlo.")
+                return 1
+
+        input("Pulsa Enter para empezar (cuenta atrás de 3 s)... ")
+        for n in (3, 2, 1):
+            print(f"  {n}...", flush=True)
+            time.sleep(1)
+        recorder.record_until(
+            in_args, out, lambda: input("● GRABANDO. Lee el texto y pulsa Enter al terminar. ")
+        )
+    except recorder.RecordingError as exc:
+        print(f"No se pudo grabar: {exc}", file=sys.stderr)
+        return 1
+    except (KeyboardInterrupt, EOFError):
+        print("\nCancelado.")
+        return 130
+
+    with tempfile.TemporaryDirectory() as tmp:
+        converted = Path(tmp) / "toma.wav"
+        error = _convert_to_wav24(out, converted)
+        if error:
+            print(f"ffmpeg no pudo leer la toma:\n{error}", file=sys.stderr)
+            return 1
+        audio, sr = sf.read(converted, dtype="float32")
+
+    print(f"\nToma guardada: {out}")
+    print(format_report(analyze(audio, sr)))
+    print(f"\nSi te convence: python -m voxforge voice add NOMBRE_DEL_PERFIL {out}")
+    return 0
+
+
+def cmd_voice_prepare(args, data_dir, settings, store) -> int:
+    if bool(args.wav) == bool(args.profile):
+        print("Indica un archivo o --profile NOMBRE (solo uno de los dos).", file=sys.stderr)
+        return 2
+
+    if args.profile:
+        profile = store.get_profile(args.profile)
+        if profile is None:
+            print(f"No existe el perfil '{args.profile}'.", file=sys.stderr)
+            return 2
+        src = Path(profile["ref_path"])
+    else:
+        src = Path(args.wav).expanduser()
+        if not src.is_file():
+            print(f"No existe el archivo: {src}", file=sys.stderr)
+            return 2
+
+    out = (
+        Path(args.out).expanduser()
+        if args.out
+        else data_dir / "samples" / f"{src.parent.name if args.profile else src.stem}_limpia.wav"
+    )
+
+    if out.exists() and not args.force:
+        print(
+            f"Ya existe {out}. Usa --force para sobrescribirlo o elige otro --out.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            original = Path(tmp) / "original.wav"
+            error = _convert_to_wav24(src, original)
+            if error:
+                print(f"ffmpeg no pudo leer la muestra:\n{error}", file=sys.stderr)
+                return 1
+            audio, sr = sf.read(original, dtype="float32")
+            before = analyze(audio, sr)
+        result = prepare(src, out, nr=args.nr)
+    except PrepareError as exc:
+        print(f"No se pudo preparar la muestra: {exc}", file=sys.stderr)
+        return 1
+
+    audio, sr = sf.read(out, dtype="float32")
+    after = analyze(audio, sr)
+
+    print(f"Antes  : {_summary(before)}")
+    print(f"Después: {_summary(after)}")
+    print(
+        f"(reducción de ruido {'desactivada' if args.nr <= 0 else f'{args.nr:g} dB'}, "
+        f"ganancia aplicada {result.gain_db:+.1f} dB)"
+    )
+    print(f"\nMuestra preparada: {out}")
+    print(format_report(after))
+    print(f"\nPara probarla: python -m voxforge voice add NOMBRE_DEL_PERFIL {out}")
+    return 0
+
+
+def cmd_voice_similarity(args, data_dir, settings, store) -> int:
+    from .engines.base import ModelUnavailableError
+    from .engines.xtts import XttsEngine
+
+    paths = [Path(args.ref).expanduser()] + [Path(f).expanduser() for f in args.files]
+    for path in paths:
+        if not path.is_file():
+            print(f"No existe el archivo: {path}", file=sys.stderr)
+            return 2
+
+    engine = XttsEngine(threads=settings.threads)
+    try:
+        print("Cargando el modelo para usar su codificador de voz...")
+        engine.load()
+        ref_audio, ref_sr = _load_mono24(paths[0])
+        if ref_audio is None:
+            print(f"ffmpeg no pudo leer la referencia:\n{ref_sr}", file=sys.stderr)
+            return 1
+        ref_emb = engine.speaker_embedding(ref_audio, ref_sr)
+        ceiling = compare(engine.speaker_embedding, ref_emb, ref_audio, ref_sr, args.window)
+        print(f"\nReferencia: {paths[0]}")
+        print(
+            f"  {'(la propia referencia, techo)':<32} "
+            f"media {ceiling.mean:.3f}  mínima {ceiling.minimum:.3f}  "
+            f"({ceiling.windows} ventanas de {args.window:g} s)"
+        )
+        for path in paths[1:]:
+            audio, sr = _load_mono24(path)
+            if audio is None:
+                print(f"  {path.name}: ffmpeg no pudo leerlo ({sr})", file=sys.stderr)
+                continue
+            r = compare(engine.speaker_embedding, ref_emb, audio, sr, args.window)
+            print(
+                f"  {path.name:<32} "
+                f"media {r.mean:.3f}  mínima {r.minimum:.3f}  "
+                f"({r.windows} ventanas de {args.window:g} s)"
+            )
+    except ModelUnavailableError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        return 1
+    finally:
+        engine.unload()
+    print("\nMás alto = más parecido a la referencia. 'Mínima' baja si hay tramos que se desvían (consistencia).")
+    return 0
+
+
+def cmd_voice_list(args, data_dir, settings, store) -> int:
+    profiles = store.list_profiles()
+    if not profiles:
+        print("No hay perfiles. Crea uno con: python -m voxforge voice add NOMBRE muestra.wav")
+        return 0
+    for p in profiles:
+        print(f"{p['name']:<20} idioma={p['language']}  muestra={p['ref_path']}")
+    return 0
+
+
+def cmd_voice_delete(args, data_dir, settings, store) -> int:
+    try:
+        result = delete_voice(
+            args.name,
+            yes=args.yes,
+            purge_source=args.source,
+            shred=args.shred,
+            db_path=data_dir / "voxforge.db",
+        )
+    except ProfileNotFound as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"Error preparando el borrado: {exc}", file=sys.stderr)
+        return 1
+
+    if result.get("dry_run"):
+        print(f"Dry-run: no se ha eliminado nada para '{result['profile']}'.")
+        print()
+        print("Filas relacionadas que se borrarían:")
+        if result["db_rows_to_delete"]:
+            for table, count in sorted(result["db_rows_to_delete"].items()):
+                print(f"  {table}: {count}")
+        else:
+            print("  Ninguna detectada.")
+        print()
+        print("Archivos que se borrarían:")
+        if result["files_to_delete"]:
+            for path in result["files_to_delete"]:
+                print(f"  {path}")
+        else:
+            print("  Ninguno detectado.")
+        print()
+        print("Para ejecutar el borrado real:")
+        print(f"  python -m voxforge voice delete {result['profile']} --yes")
+        return 0
+
+    print(f"Perfil eliminado: {result['profile']}")
+    print("Filas eliminadas:")
+    if result["deleted_db_rows"]:
+        for table, count in sorted(result["deleted_db_rows"].items()):
+            print(f"  {table}: {count}")
+    else:
+        print("  Ninguna.")
+    print()
+    print("Archivos eliminados:")
+    if result["deleted_files"]:
+        for path in result["deleted_files"]:
+            print(f"  {path}")
+    else:
+        print("  Ninguno.")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# text                                                                         #
+# --------------------------------------------------------------------------- #
+
+def cmd_text_extract(args, data_dir, settings, store) -> int:
+    src = Path(args.file).expanduser()
+    try:
+        text = extract_text(src, lang=args.lang)
+    except ImporterError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    out = (
+        Path(args.out).expanduser()
+        if args.out
+        else data_dir / "imports" / f"{src.stem}.txt"
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8")
+
+    chars = len(text)
+    print(f"\nTexto extraído: {chars} caracteres (~{chars / 10 / 60:.0f} min de audio estimado)")
+    print(f"Guardado en: {out}")
+    print(f"Para narrarlo: python -m voxforge speak {out} --voice NOMBRE --out data/exports/X.wav")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# pron                                                                         #
+# --------------------------------------------------------------------------- #
+
+def cmd_pron_packs(args, data_dir, settings, store) -> int:
+    cfg, langs = _load_pron_config(args, data_dir)
+    if cfg is None:
+        print("No hay diccionario en data/pronunciation.json.")
+        print("Crea uno o usa --pronunciation RUTA.")
+        return 0
+
+    print(f"Diccionario: {cfg.path}")
+    print(f"Versión: {cfg.version}")
+    print()
+    print("Packs disponibles:")
+    for lang in cfg.available_languages():
+        print(f"  {lang:<8} {len(cfg.packs[lang]):>4} términos")
+
+    active = langs if langs is not None else cfg.default_languages
+    try:
+        active_tuple, terms = cfg.merged_terms(active)
+    except PronunciationError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print()
+    print(f"Activos: {', '.join(active_tuple)}")
+    print(f"Términos efectivos tras fusión: {len(terms)}")
+    return 0
+
+
+def cmd_pron_check(args, data_dir, settings, store) -> int:
+    cfg, langs = _load_pron_config(args, data_dir)
+    if cfg is None:
+        print("No hay diccionario activo. Usa --pronunciation RUTA o crea data/pronunciation.json.")
+        return 0
+
+    raw: str | None = None
+    origin = ""
+
+    if args.project and args.chapter is not None:
+        try:
+            ch = get_chapter(data_dir / "voxforge.db", args.project, args.chapter)
+        except (ProjectNotFound, ChapterNotFound) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        raw = ch["text"]
+        origin = f"capítulo {args.chapter} del proyecto '{args.project}'"
+    elif args.file:
+        src = Path(args.file).expanduser()
+        if not src.is_file():
+            print(f"No existe el archivo: {src}", file=sys.stderr)
+            return 2
+        if src.suffix.lower() in PDF_EXTS:
+            try:
+                raw = extract_text(src, lang=args.lang)
+            except ImporterError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+        else:
+            raw = src.read_text(encoding="utf-8", errors="replace")
+        origin = str(src)
+    else:
+        print("Indica un archivo o --project NOMBRE --chapter ORDINAL.", file=sys.stderr)
+        return 2
+
+    if not raw or not raw.strip():
+        print("El texto está vacío.", file=sys.stderr)
+        return 2
+
+    try:
+        report = cfg.check(raw, langs)
+        transformed = cfg.apply(raw, langs)
+    except PronunciationError as exc:
+        print(f"Error de diccionario: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Origen: {origin}")
+    print(f"Texto original: {len(raw)} caracteres")
+    print(f"Packs activos: {', '.join(report['languages'])}")
+    print(f"Términos en diccionario: {report['terms_active']} "
+          f"(efectivos tras filtrar redundantes: {report['terms_effective']})")
+    print()
+
+    if report["redundant"]:
+        print(f"Entradas redundantes (término = reemplazo, ignoradas): "
+              f"{', '.join(report['redundant'])}")
+        print("Considera borrarlas del JSON para limpiar el diccionario.")
+        print()
+
+    if not report["counts"]:
+        print("El diccionario no haría sustituciones en este texto.")
+        return 0
+
+    print(
+        f"Sustituciones detectadas: {len(report['matches'])} "
+        f"en {len(report['counts'])} términos"
+    )
+    print()
+    for item in report["counts"][:50]:
+        repl = item["replacement"] or "(eliminar)"
+        print(f"  {item['count']:>3} x {item['term']} -> {repl}")
+    if len(report["counts"]) > 50:
+        print(f"  ... y {len(report['counts']) - 50} términos más.")
+
+    print()
+    print(
+        f"Texto transformado: {len(transformed)} caracteres "
+        f"(delta {len(transformed) - len(raw):+d})"
+    )
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# project                                                                      #
+# --------------------------------------------------------------------------- #
+
+def cmd_project_create(args, data_dir, settings, store) -> int:
+    if store.get_profile(args.voice) is None:
+        print(
+            f"No existe el perfil de voz '{args.voice}'. "
+            "Perfiles disponibles: python -m voxforge voice list",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        p = create_project(
+            data_dir / "voxforge.db",
+            args.name,
+            args.voice,
+            args.language or settings.language,
+        )
+    except ProjectError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    print(f"Proyecto '{p['name']}' creado (voz: {p['voice_profile']}, idioma: {p['language']}).")
+    return 0
+
+
+def cmd_project_list(args, data_dir, settings, store) -> int:
+    projects = list_projects(data_dir / "voxforge.db")
+    if not projects:
+        print("No hay proyectos. Crea uno: python -m voxforge project create NOMBRE --voice yo_limpia")
+        return 0
+    for p in projects:
+        print(
+            f"{p['name']:<20} "
+            f"voz={p['voice_profile']:<14} "
+            f"idioma={p['language'] or '-':<4} "
+            f"capítulos={p['chapters']}"
+        )
+    return 0
+
+
+def cmd_project_show(args, data_dir, settings, store) -> int:
+    try:
+        p = get_project(data_dir / "voxforge.db", args.name)
+    except ProjectNotFound as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    print(f"Proyecto: {p['name']}")
+    print(f"  voz:       {p['voice_profile']}")
+    print(f"  idioma:    {p['language'] or '-'}")
+    print(f"  capítulos: {p['chapters']}")
+    return 0
+
+
+def cmd_project_delete(args, data_dir, settings, store) -> int:
+    try:
+        result = delete_project(data_dir / "voxforge.db", args.name, yes=args.yes)
+    except ProjectNotFound as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except ProjectError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if result.get("dry_run"):
+        print(f"Dry-run: no se ha eliminado nada para el proyecto '{result['project']}'.")
+        print(f"  Se borrarían {result['chapters_to_delete']} capítulo(s).")
+        print("  NO se toca la voz del perfil ni la caché global de fragmentos.")
+        print()
+        print("Para ejecutar el borrado real:")
+        print(f"  python -m voxforge project delete {result['project']} --yes")
+        return 0
+
+    print(
+        f"Proyecto eliminado: {result['project']} "
+        f"({result['deleted_chapters']} capítulo(s) borrados)."
+    )
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# chapter                                                                      #
+# --------------------------------------------------------------------------- #
+
+def cmd_chapter_add(args, data_dir, settings, store) -> int:
+    src = Path(args.file).expanduser()
+    if not src.is_file():
+        print(f"No existe el archivo: {src}", file=sys.stderr)
+        return 2
+    try:
+        ch = add_chapter(
+            data_dir / "voxforge.db",
+            args.project,
+            args.title,
+            src,
+            lang=args.lang,
+        )
+    except (ProjectNotFound, ProjectError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"Capítulo {ch['ordinal']} añadido a '{ch['project']}': {ch['title']} "
+        f"({ch['chars']} caracteres)."
+    )
+    return 0
+
+
+def cmd_chapter_list(args, data_dir, settings, store) -> int:
+    try:
+        chapters = list_chapters(data_dir / "voxforge.db", args.project)
+    except ProjectNotFound as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    if not chapters:
+        print(f"El proyecto '{args.project}' no tiene capítulos.")
+        return 0
+    for ch in chapters:
+        print(f"  {ch['ordinal']:>3}. {ch['title']:<40} ({ch['chars']} car.)")
+    return 0
+
+
+def cmd_chapter_fragments(args, data_dir, settings, store) -> int:
+    cfg, pron_langs = _load_pron_config(args, data_dir)
+    try:
+        ch = get_chapter(data_dir / "voxforge.db", args.project, args.ordinal)
+    except (ProjectNotFound, ChapterNotFound) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    text = _apply_pronunciation(ch["text"], cfg, pron_langs)
+    chunks = split_text(text, settings.max_chunk_chars)
+    if not chunks:
+        print("El capítulo no contiene texto.")
+        return 0
+
+    print(f"Capítulo {args.ordinal} de '{args.project}': {len(chunks)} fragmento(s)")
+    for i, chunk in enumerate(chunks, start=1):
+        excerpt = " ".join(chunk.text.split())[:80]
+        print(f"  {i:>3}. {len(chunk.text):>5} car. | {excerpt}")
+    return 0
+
+
+def cmd_chapter_narrate(args, data_dir, settings, store) -> int:
+    from .engines.base import ModelUnavailableError
+    from .engines.xtts import XttsEngine
+    from .pipeline import narrate
+
+    cfg, pron_langs = _load_pron_config(args, data_dir)
+    try:
+        profile, proj_lang = _resolve_project_profile(store, args.project, data_dir)
+        ch = get_chapter(data_dir / "voxforge.db", args.project, args.ordinal)
+    except (ProjectNotFound, ChapterNotFound) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    text = _apply_pronunciation(ch["text"], cfg, pron_langs)
+
+    out = (
+        Path(args.out).expanduser()
+        if args.out
+        else data_dir / "exports" / args.project / f"{args.ordinal:03d}_{_slug(ch['title'])}.mp3"
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    engine = XttsEngine(threads=settings.threads)
+    try:
+        result = narrate(
+            text,
+            profile,
+            engine,
+            store,
+            settings,
+            data_dir / "cache",
+            out,
+            language=args.language or proj_lang,
+            regen=args.regen,
+        )
+    except ModelUnavailableError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nInterrumpido. Fragmentos ya generados quedan en caché.")
+        return 130
+
+    print(f"\nListo: {result.out_path}")
+    print(
+        f"Fragmentos: {result.fragments} ({result.generated} generados, {result.cached} de caché, "
+        f"{result.retried} con reintento, {result.doubtful} dudosos)"
+    )
+    print(
+        f"Audio: {result.audio_s:.1f} s | Cálculo: {result.compute_s:.1f} s | "
+        f"Pausas térmicas: {result.waited_s:.0f} s"
+    )
+    return 0
+
+
+def cmd_chapter_regen(args, data_dir, settings, store) -> int:
+    from .engines.base import ModelUnavailableError
+    from .engines.xtts import XttsEngine
+    from .pipeline import narrate
+
+    cfg, pron_langs = _load_pron_config(args, data_dir)
+    try:
+        profile, proj_lang = _resolve_project_profile(store, args.project, data_dir)
+        ch = get_chapter(data_dir / "voxforge.db", args.project, args.ordinal)
+    except (ProjectNotFound, ChapterNotFound) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    text = _apply_pronunciation(ch["text"], cfg, pron_langs)
+    chunks = split_text(text, settings.max_chunk_chars)
+    if args.fragment < 1 or args.fragment > len(chunks):
+        print(f"El fragmento {args.fragment} está fuera de rango (1-{len(chunks)}).", file=sys.stderr)
+        return 2
+
+    out = (
+        Path(args.out).expanduser()
+        if args.out
+        else data_dir / "exports" / args.project / f"{args.ordinal:03d}_{_slug(ch['title'])}.mp3"
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    engine = XttsEngine(threads=settings.threads)
+    try:
+        result = narrate(
+            text,
+            profile,
+            engine,
+            store,
+            settings,
+            data_dir / "cache",
+            out,
+            language=args.language or proj_lang,
+            regen_fragment=args.fragment,
+            regen_seed=args.seed,
+        )
+    except ModelUnavailableError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nInterrumpido. Lo generado queda en caché.")
+        return 130
+
+    print(f"\nListo: {result.out_path}")
+    print(
+        f"Fragmentos: {result.fragments} ({result.generated} generados, {result.cached} de caché, "
+        f"{result.retried} con reintento, {result.doubtful} dudosos)"
+    )
+    print(
+        f"Audio: {result.audio_s:.1f} s | Cálculo: {result.compute_s:.1f} s | "
+        f"Pausas térmicas: {result.waited_s:.0f} s"
+    )
+    return 0
+
+
+def cmd_project_narrate(args, data_dir, settings, store) -> int:
+    from .engines.base import ModelUnavailableError
+    from .engines.xtts import XttsEngine
+    from .pipeline import narrate
+
+    cfg, pron_langs = _load_pron_config(args, data_dir)
+    try:
+        profile, proj_lang = _resolve_project_profile(store, args.project, data_dir)
+        chapters = list_chapters_full(data_dir / "voxforge.db", args.project)
+    except (ProjectNotFound, ChapterNotFound) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    if not chapters:
+        print(f"El proyecto '{args.project}' no tiene capítulos.", file=sys.stderr)
+        return 2
+
+    out_dir = (
+        Path(args.out_dir).expanduser()
+        if args.out_dir
+        else data_dir / "exports" / args.project
+    )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ext = args.format
+
+    if cfg is not None:
+        active = pron_langs if pron_langs is not None else cfg.default_languages
+        print(f"Diccionario de pronunciación: {cfg.path}")
+        print(f"Packs activos: {', '.join(active)}")
+
+    engine = XttsEngine(threads=settings.threads)
+    totals = {
+        "generated": 0,
+        "cached": 0,
+        "retried": 0,
+        "doubtful": 0,
+        "audio_s": 0.0,
+        "compute_s": 0.0,
+    }
+
+    try:
+        for ch in chapters:
+            text = _apply_pronunciation(ch["text"], cfg, pron_langs, log=lambda _m: None)
+            out = out_dir / f"{ch['ordinal']:03d}_{_slug(ch['title'])}.{ext}"
+            print(f"\n=== Capítulo {ch['ordinal']}: {ch['title']} ===")
+            result = narrate(
+                text,
+                profile,
+                engine,
+                store,
+                settings,
+                data_dir / "cache",
+                out,
+                language=args.language or proj_lang,
+                regen=args.regen,
+            )
+            totals["generated"] += result.generated
+            totals["cached"] += result.cached
+            totals["retried"] += result.retried
+            totals["doubtful"] += result.doubtful
+            totals["audio_s"] += result.audio_s
+            totals["compute_s"] += result.compute_s
+            print(
+                f"  -> {out.name} | {result.fragments} frag "
+                f"({result.generated} gen, {result.cached} caché)"
+            )
+    except ModelUnavailableError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nInterrumpido. Lo generado queda en caché; repite para continuar.")
+        return 130
+
+    print(f"\nProyecto '{args.project}' narrado en {out_dir}/ ({ext})")
+    print(
+        f"Total: {totals['generated']} generados, {totals['cached']} de caché, "
+        f"{totals['retried']} con reintento, {totals['doubtful']} dudosos"
+    )
+    print(f"Audio: {totals['audio_s']:.1f} s | Cálculo: {totals['compute_s']:.1f} s")
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# model / speak                                                                #
+# --------------------------------------------------------------------------- #
+
+def cmd_model_download(args, data_dir, settings, store) -> int:
+    from .engines.xtts import XttsEngine
+
+    print("Se va a DESCARGAR el modelo XTTS-v2 (~1,8 GB) desde Internet.")
+    print(
+        "Licencia: Coqui Public Model License (con restricciones de uso comercial). "
+        "Léela antes de aceptar."
+    )
+    if input("¿Continuar con la descarga? [s/N] ").strip().lower() not in ("s", "si", "sí"):
+        print("Cancelado.")
+        return 1
+    engine = XttsEngine(threads=settings.threads, offline=False)
+    engine.load()
+    engine.unload()
+    print("Modelo disponible. A partir de ahora VoxForge funciona sin conexión.")
+    return 0
+
+
+def cmd_speak(args, data_dir, settings, store) -> int:
+    from .engines.base import ModelUnavailableError
+    from .engines.xtts import XttsEngine
+    from .pipeline import narrate
+
+    cfg, pron_langs = _load_pron_config(args, data_dir)
+
+    profile = store.get_profile(args.voice)
+    if profile is None:
+        print(
+            f"No existe el perfil '{args.voice}'. "
+            "Perfiles: python -m voxforge voice list",
+            file=sys.stderr,
+        )
+        return 2
+
+    text_file = Path(args.text_file).expanduser()
+    if not text_file.is_file():
+        print(f"No existe el archivo de texto: {text_file}", file=sys.stderr)
+        return 2
+
+    if text_file.suffix.lower() in PDF_EXTS:
+        print(f"Extrayendo texto de {text_file.name} (OCR si es necesario)...")
+        try:
+            text = extract_text(text_file)
+        except ImporterError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+    else:
+        text = text_file.read_text(encoding="utf-8")
+
+    text = _apply_pronunciation(text, cfg, pron_langs)
+
+    if not text.strip():
+        print("El archivo de texto está vacío.", file=sys.stderr)
+        return 2
+
+    out = (
+        Path(args.out).expanduser()
+        if args.out
+        else data_dir / "exports" / f"{text_file.stem}_{args.voice}.wav"
+    )
+
+    engine = XttsEngine(threads=settings.threads)
+    try:
+        result = narrate(
+            text,
+            profile,
+            engine,
+            store,
+            settings,
+            data_dir / "cache",
+            out,
+            language=args.language,
+            regen=args.regen,
+        )
+    except ModelUnavailableError as exc:
+        print(f"\n{exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print(
+            "\nInterrumpido. Los fragmentos ya generados quedan en caché: "
+            "al repetir el comando se continúa."
+        )
+        return 130
+
+    print(f"\nListo: {result.out_path}")
+    print(
+        f"Fragmentos: {result.fragments} ({result.generated} generados, {result.cached} de caché, "
+        f"{result.retried} con reintento, {result.doubtful} dudosos)"
+    )
+    print(
+        f"Audio: {result.audio_s:.1f} s | Cálculo: {result.compute_s:.1f} s | "
+        f"Pausas térmicas: {result.waited_s:.0f} s"
+    )
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# parser                                                                       #
+# --------------------------------------------------------------------------- #
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="voxforge",
+        description="VoxForge Local: voz clonada 100 % local",
+    )
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("status", help="estado del sistema y de los datos").set_defaults(func=cmd_status)
+
+    # ---- voice ----
+    voice = sub.add_parser("voice", help="gestionar perfiles de voz")
+    vsub = voice.add_subparsers(dest="vcmd", required=True)
+
+    add = vsub.add_parser("add", help="crear un perfil a partir de una muestra")
+    add.add_argument("name")
+    add.add_argument("wav", help="muestra de referencia (WAV, FLAC, MP3...)")
+    add.add_argument("--language", help="idioma del perfil (por defecto el de la configuración)")
+    add.set_defaults(func=cmd_voice_add)
+
+    check = vsub.add_parser("check", help="analizar la calidad de una muestra o de un perfil")
+    check.add_argument("wav", nargs="?", help="archivo de audio a analizar")
+    check.add_argument("--profile", help="analizar la muestra de un perfil existente")
+    check.set_defaults(func=cmd_voice_check)
+
+    record = vsub.add_parser("record", help="grabar una muestra desde el micrófono y analizarla")
+    record.add_argument("name", help="nombre base del archivo de la toma")
+    record.add_argument("--source", default="default", help="entrada de audio (por defecto la predeterminada)")
+    record.add_argument("--skip-room-check", action="store_true", help="no medir el ruido de la sala antes")
+    record.set_defaults(func=cmd_voice_record)
+
+    prep = vsub.add_parser(
+        "prepare",
+        help="limpiar una muestra: ruido, recorte y nivel (no modifica el original)",
+    )
+    prep.add_argument("wav", nargs="?", help="archivo de audio a preparar")
+    prep.add_argument("--profile", help="preparar la muestra de un perfil existente")
+    prep.add_argument("--out", help="archivo de salida (por defecto data/samples/NOMBRE_limpia.wav)")
+    prep.add_argument(
+        "--nr",
+        type=float,
+        default=12.0,
+        help="reducción de ruido en dB (0 = desactivada; por defecto 12)",
+    )
+    prep.add_argument("--force", action="store_true", help="sobrescribir la salida si ya existe")
+    prep.set_defaults(func=cmd_voice_prepare)
+
+    sim = vsub.add_parser(
+        "similarity",
+        help="comparar objetivamente el parecido de audios con una referencia",
+    )
+    sim.add_argument("ref", help="audio de referencia (p. ej. tu grabación original)")
+    sim.add_argument("files", nargs="+", help="audios a comparar con la referencia")
+    sim.add_argument(
+        "--window",
+        type=float,
+        default=8.0,
+        help="duración de cada ventana en segundos (por defecto 8)",
+    )
+    sim.set_defaults(func=cmd_voice_similarity)
+
+    vsub.add_parser("list", help="listar perfiles").set_defaults(func=cmd_voice_list)
+
+    delete = vsub.add_parser("delete", help="eliminar un perfil de voz y sus datos asociados")
+    delete.add_argument("name", help="nombre exacto del perfil a eliminar")
+    delete.add_argument(
+        "--yes",
+        action="store_true",
+        help="ejecutar el borrado; sin esta opción solo se muestra el plan",
+    )
+    delete.add_argument(
+        "--source",
+        action="store_true",
+        help="eliminar también la muestra fuente si existe en data/samples",
+    )
+    delete.add_argument(
+        "--shred",
+        action="store_true",
+        help="sobrescribir archivos antes de borrarlos (mejor esfuerzo)",
+    )
+    delete.set_defaults(func=cmd_voice_delete)
+
+    # ---- text ----
+    textp = sub.add_parser("text", help="importar textos")
+    tsub = textp.add_subparsers(dest="tcmd", required=True)
+
+    ext = tsub.add_parser(
+        "extract",
+        help="extraer texto de TXT, MD o PDF (escaneados mediante OCR)",
+    )
+    ext.add_argument("file")
+    ext.add_argument(
+        "--lang",
+        default="spa",
+        help="idioma OCR de Tesseract para PDF escaneado (por defecto spa)",
+    )
+    ext.add_argument(
+        "--out",
+        help="archivo .txt de salida (por defecto data/imports/NOMBRE.txt)",
+    )
+    ext.set_defaults(func=cmd_text_extract)
+
+    # ---- project ----
+    project = sub.add_parser("project", help="gestionar proyectos de narración")
+    psub = project.add_subparsers(dest="pcmd", required=True)
+
+    pcreate = psub.add_parser("create", help="crear un proyecto con una voz asignada")
+    pcreate.add_argument("name")
+    pcreate.add_argument("--voice", required=True, help="perfil de voz del proyecto")
+    pcreate.add_argument("--language", help="idioma (por defecto el de la configuración)")
+    pcreate.set_defaults(func=cmd_project_create)
+
+    psub.add_parser("list", help="listar proyectos").set_defaults(func=cmd_project_list)
+
+    pshow = psub.add_parser("show", help="ver un proyecto")
+    pshow.add_argument("name")
+    pshow.set_defaults(func=cmd_project_show)
+
+    pdel = psub.add_parser("delete", help="eliminar un proyecto y sus capítulos")
+    pdel.add_argument("name")
+    pdel.add_argument(
+        "--yes",
+        action="store_true",
+        help="ejecutar el borrado; sin esta opción solo se muestra el plan",
+    )
+    pdel.set_defaults(func=cmd_project_delete)
+
+    # ---- chapter ----
+    chapter = sub.add_parser("chapter", help="gestionar capítulos de un proyecto")
+    csub = chapter.add_subparsers(dest="ccmd", required=True)
+
+    cadd = csub.add_parser("add", help="importar un capítulo desde TXT/MD/PDF")
+    cadd.add_argument("project")
+    cadd.add_argument("title")
+    cadd.add_argument("--file", required=True, help="archivo de origen (TXT, MD o PDF)")
+    cadd.add_argument(
+        "--lang",
+        default="spa",
+        help="idioma OCR si el origen es un PDF escaneado",
+    )
+    cadd.set_defaults(func=cmd_chapter_add)
+
+    clist = csub.add_parser("list", help="listar capítulos de un proyecto")
+    clist.add_argument("project")
+    clist.set_defaults(func=cmd_chapter_list)
+
+    cnarr = csub.add_parser("narrate", help="narrar un capítulo del proyecto")
+    cnarr.add_argument("project")
+    cnarr.add_argument("ordinal", type=int, help="número de capítulo (ver chapter list)")
+    cnarr.add_argument(
+        "--out",
+        help="archivo de salida (por defecto data/exports/PROYECTO/NNN_titulo.mp3)",
+    )
+    cnarr.add_argument("--language", help="idioma (por defecto el del proyecto)")
+    cnarr.add_argument("--regen", action="store_true", help="ignorar caché y regenerar")
+    _add_pron_args(cnarr)
+    cnarr.set_defaults(func=cmd_chapter_narrate)
+
+    cfrag = csub.add_parser("fragments", help="listar los fragmentos de un capítulo")
+    cfrag.add_argument("project")
+    cfrag.add_argument("ordinal", type=int, help="número de capítulo (ver chapter list)")
+    _add_pron_args(cfrag)
+    cfrag.set_defaults(func=cmd_chapter_fragments)
+
+    cregen = csub.add_parser(
+        "regen",
+        help="regenerar un fragmento individual y reensamblar el capítulo exportado",
+    )
+    cregen.add_argument("project")
+    cregen.add_argument("ordinal", type=int, help="número de capítulo")
+    cregen.add_argument(
+        "--fragment",
+        type=int,
+        required=True,
+        help="número de fragmento a regenerar (ver chapter fragments)",
+    )
+    cregen.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="semilla fija para reproducir el take; sin ella se usa una aleatoria (se imprime por pantalla)",
+    )
+    cregen.add_argument(
+        "--out",
+        help="archivo de salida (por defecto data/exports/PROYECTO/NNN_titulo.mp3)",
+    )
+    cregen.add_argument("--language", help="idioma (por defecto el del proyecto)")
+    _add_pron_args(cregen)
+    cregen.set_defaults(func=cmd_chapter_regen)
+
+    # ---- project-narrate ----
+    proj_narr = sub.add_parser(
+        "project-narrate",
+        help="narrar todos los capítulos de un proyecto",
+    )
+    proj_narr.add_argument("project")
+    proj_narr.add_argument(
+        "--out-dir",
+        help="directorio de salida (por defecto data/exports/PROYECTO/)",
+    )
+    proj_narr.add_argument(
+        "--format",
+        default="mp3",
+        choices=["wav", "flac", "mp3", "ogg"],
+        help="formato de exportación por capítulo (por defecto mp3)",
+    )
+    proj_narr.add_argument("--language", help="idioma (por defecto el del proyecto)")
+    proj_narr.add_argument("--regen", action="store_true", help="ignorar caché y regenerar")
+    _add_pron_args(proj_narr)
+    proj_narr.set_defaults(func=cmd_project_narrate)
+
+    # ---- pron ----
+    pron = sub.add_parser("pron", help="diccionario de pronunciación")
+    pronsub = pron.add_subparsers(dest="prcmd", required=True)
+
+    ppacks = pronsub.add_parser("packs", help="listar packs de pronunciación disponibles")
+    _add_pron_args(ppacks)
+    ppacks.set_defaults(func=cmd_pron_packs)
+
+    pcheck = pronsub.add_parser("check", help="mostrar qué sustituiría el diccionario")
+    pcheck.add_argument(
+        "file",
+        nargs="?",
+        help="archivo TXT/MD/PDF; opcional si usas --project y --chapter",
+    )
+    pcheck.add_argument("--project", help="proyecto del capítulo a comprobar")
+    pcheck.add_argument("--chapter", type=int, help="ordinal del capítulo a comprobar")
+    pcheck.add_argument("--lang", default="spa", help="idioma OCR si el archivo es PDF")
+    _add_pron_args(pcheck)
+    pcheck.set_defaults(func=cmd_pron_check)
+    def cmd_pron_audit(args, data_dir, settings, store) -> int:
+        cfg, langs = _load_pron_config(args, data_dir)
+        if cfg is None:
+           print("No hay diccionario activo. Usa --pronunciation RUTA o crea data/pronunciation.json.")
+           return 0
+        
+           paidit = pronsub.add_parser(
+           "audit",
+           help="listar nombres propios probables y marcar los no cubiertos por el diccionario",
+           )
+           paidit.add_argument("file", nargs="?", help="archivo TXT/MD/PDF; opcional con --project/--chapter")
+           paidit.add_argument("--project", help="proyecto del capítulo a auditar")
+           paidit.add_argument("--chapter", type=int, help="ordinal del capítulo a auditar")
+           paidit.add_argument("--lang", default="spa", help="idioma OCR si el archivo es PDF")
+           paidit.add_argument("--top", type=int, default=80, help="nº máximo de candidatos a mostrar")
+           _add_pron_args(paidit)
+           paidit.set_defaults(func=cmd_pron_audit)
+
+    raw: str | None = None
+    origin = ""
+
+           if args.project and args.chapter is not None:
+        try:
+            ch = get_chapter(data_dir / "voxforge.db", args.project, args.chapter)
+        except (ProjectNotFound, ChapterNotFound) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        raw = ch["text"]
+        origin = f"capítulo {args.chapter} del proyecto '{args.project}'"
+    elif args.file:
+        src = Path(args.file).expanduser()
+        if not src.is_file():
+            print(f"No existe el archivo: {src}", file=sys.stderr)
+            return 2
+        if src.suffix.lower() in PDF_EXTS:
+            try:
+                raw = extract_text(src, lang=args.lang)
+            except ImporterError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+        else:
+            raw = src.read_text(encoding="utf-8", errors="replace")
+        origin = str(src)
+    else:
+        print("Indica un archivo o --project NOMBRE --chapter ORDINAL.", file=sys.stderr)
+        return 2
+
+    if not raw or not raw.strip():
+        print("El texto está vacío.", file=sys.stderr)
+        return 2
+
+    try:
+        report = cfg.audit(raw, langs, top=args.top)
+    except PronunciationError as exc:
+        print(f"Error de diccionario: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Origen: {origin}")
+    print(f"Packs activos: {', '.join(report['languages'])}")
+    print(f"Candidatos capitalizados totales: {report['candidates_total']}")
+    print()
+
+    if not report["top"]:
+        print("No se encontraron candidatos.")
+        return 0
+
+    print(f"{'#':>3}  {'freq':>5}  {'cubierto':<9}  {'propio':<7}  término")
+    print("-" * 60)
+    for i, item in enumerate(report["top"], start=1):
+        cov = "sí" if item["covered"] else "NO"
+        prop = "sí" if item["likely_proper"] else "¿?"
+        print(f"{i:>3}  {item['count']:>5}  {cov:<9}  {prop:<7}  {item['term']}")
+
+    print()
+    n_uncov = len(report["uncovered_likely"])
+    print(f"Candidatos probables NO cubiertos por el diccionario: {n_uncov}")
+    if n_uncov:
+        print("Añádelos al pack 'base' (o crea un pack 'maya') en data/pronunciation.json:")
+        print()
+        for item in report["uncovered_likely"][:40]:
+            print(f'        "{item["term"]}": "",   # freq {item["count"]}')
+        if n_uncov > 40:
+            print(f'        # ... y {n_uncov - 40} más (sube --top para verlos)')
+    return 0
+
+    # ---- model ----
+    model = sub.add_parser("model", help="gestionar modelos de voz")
+    msub = model.add_subparsers(dest="mcmd", required=True)
+    msub.add_parser(
+        "download",
+        help="descargar XTTS-v2 (única operación que usa Internet)",
+    ).set_defaults(func=cmd_model_download)
+
+    # ---- speak ----
+    speak = sub.add_parser("speak", help="narrar un archivo de texto con una voz")
+    speak.add_argument("text_file")
+    speak.add_argument("--voice", required=True, help="nombre del perfil")
+    speak.add_argument("--out", help="archivo de salida (.wav, .flac, .mp3 u .ogg)")
+    speak.add_argument("--language", help="idioma (por defecto el del perfil)")
+    speak.add_argument(
+        "--regen",
+        action="store_true",
+        help="regenerar todos los fragmentos con una semilla nueva (ignora la caché)",
+    )
+    _add_pron_args(speak)
+    speak.set_defaults(func=cmd_speak)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    data_dir = home()
+    settings = load_settings(data_dir)
+    store = Store(data_dir / "voxforge.db")
+    try:
+        return args.func(args, data_dir, settings, store)
+    except sqlite3.Error as exc:
+        print(f"Error de base de datos: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        store.close()
