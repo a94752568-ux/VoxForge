@@ -4,7 +4,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Status: Beta](https://img.shields.io/badge/status-Beta-yellow.svg)]()
+![Status: Beta](https://img.shields.io/badge/status-Beta-yellow.svg)
 
 ---
 
@@ -58,7 +58,7 @@ pipx install -e .
 pipx install .
 ```
 
-### Opcion 2: Instalacion con pip
+### Opción 2: Instalación con pip
 
 ```bash
 # Clonar el repositorio
@@ -77,9 +77,9 @@ pip install -e .
 pip install -r requirements.txt
 ```
 
-### Opcion 3: Descarga de modelos
+### Opción 3: Descarga de modelos
 
-Los modelos de XTTS-v2 se descargan automaticamente la primera vez que los usas:
+Los modelos de XTTS-v2 se descargan automáticamente la primera vez que los usas:
 
 ```bash
 voxforge model download
@@ -94,7 +94,7 @@ voxforge model download
 Primero, graba una muestra de tu voz (recomendado: 1-5 minutos de audio claro):
 
 ```bash
-# Grabacion directa (el programa te guiara)
+# Grabación directa (el programa te guiará)
 voxforge voice record --name mi_voz
 
 # O usando un archivo WAV existente
@@ -113,7 +113,7 @@ voxforge project create mi_libro --voice mi_voz --language es
 # Desde un archivo de texto
 voxforge chapter add mi_libro 1 --file capitulo1.txt
 
-# Desde un PDF (se extraera el texto automaticamente)
+# Desde un PDF (se extraerá el texto automáticamente)
 voxforge chapter add mi_libro 2 --file capitulo2.pdf
 
 # Desde DOCX, EPUB, MD
@@ -126,7 +126,7 @@ voxforge chapter add mi_libro 3 --file capitulo3.docx
 # Narrar con la voz clonada
 voxforge chapter narrate mi_libro 1 --out Capitulo_01.mp3
 
-# Narrar con normalizacion EBU R128 (calidad de estudio)
+# Narrar con normalización EBU R128 (calidad de estudio)
 voxforge chapter narrate mi_libro 1 --out Capitulo_01.mp3
 
 # Narrar con efectos de voz (opcional)
@@ -136,13 +136,13 @@ voxforge chapter narrate mi_libro 1 --fx warm --out Capitulo_01.mp3
 ### 5. Narrar un proyecto completo
 
 ```bash
-# Narrar todos los capitulos de un proyecto
+# Narrar todos los capítulos de un proyecto
 voxforge project-narrate mi_libro --out-dir audiobook/
 
-# Con formato WAV (sin compresion)
+# Con formato WAV (sin compresión)
 voxforge project-narrate mi_libro --format wav --out-dir audiobook/
 
-# Con formato FLAC (calidad alta, compresion sin perdida)
+# Con formato FLAC (calidad alta, compresión sin pérdida)
 voxforge project-narrate mi_libro --format flac --out-dir audiobook/
 ```
 
@@ -194,16 +194,16 @@ La configuraci\u00f3n se guarda en `~/.voxforge/config.json` (Linux/macOS) o `%A
 
 ### Opciones de configuraci\u00f3n
 
-| Opcion | Tipo | Descripci\u00f3n | Valor por defecto |
+| Opción | Tipo | Descripción | Valor por defecto |
 |--------|------|------------------|-------------------|
 | `language` | string | Idioma por defecto | "es" |
 | `voice_profile` | string | Perfil de voz por defecto | "yo_limpia" |
 | `sample_rate` | int | Frecuencia de muestreo | 24000 |
-| `apply_ebu_r128` | bool | Aplicar normalizacion EBU R128 | true |
-| `cache_dir` | string | Directorio de cache | "data/cache" |
+| `apply_ebu_r128` | bool | Aplicar normalización EBU R128 | true |
+| `cache_dir` | string | Directorio de caché | "data/cache" |
 | `export_dir` | string | Directorio de exportaci\u00f3n | "data/exports" |
-| `max_retries` | int | Maximos reintentos de sintetizacion | 3 |
-| `auto_unload` | bool | Descargar modelo automaticamente | true |
+| `max_retries` | int | Máximos reintentos de síntesis | 3 |
+| `auto_unload` | bool | Descargar modelo automáticamente | true |
 | `auto_unload_minutes` | int | Minutos de inactividad antes de descargar | 10 |
 
 ---
@@ -252,7 +252,7 @@ VoxForge funciona completamente en CPU. La velocidad de sintetizaci\u00f3n depen
 | Procesamiento de audio | ~500 MB - 1 GB |
 | Cach\u00e9 de fragmentos | Depende del tama\u00f1o del proyecto |
 
-**Nota:** El modelo se carga en memoria solo cuando se necesita y se descarga automaticamente despu\u00e9s de 10 minutos de inactividad (configurable).
+**Nota:** El modelo se carga en memoria solo cuando se necesita y se descarga automáticamente despu\u00e9s de 10 minutos de inactividad (configurable).
 
 ### Sistema de Cach\u00e9
 
@@ -266,7 +266,7 @@ Para limpiar la cach\u00e9:
 ```bash
 voxforge cache cleanup
 
-# Limpiar cache de fragmento individuales
+# Limpiar caché de fragmentos individuales
 voxforge cache cleanup --fragments
 
 # Limpiar cache de voz
@@ -309,13 +309,13 @@ voxforge model download
 
 ### Problema: El audio suena muy bajo
 
-**Soluci\u00f3n:** La normalizacion EBU R128 ya esta aplicada por defecto. Si el audio suena bajo:
-- Verifica que `apply_ebu_r128` este activo en la configuracion
-- Asegurate de que la muestra de voz sea clara y con buen nivel
+**Soluci\u00f3n:** La normalización EBU R128 ya está aplicada por defecto. Si el audio suena bajo:
+- Verifica que `apply_ebu_r128` esté activo en la configuración
+- Asegúrate de que la muestra de voz sea clara y con buen nivel
 
 ### Problema: La narraci\u00f3n se interrumpe
 
-**Soluci\u00f3n:** VoxForge guarda el progreso automaticamente. Para reanudar:
+**Soluci\u00f3n:** VoxForge guarda el progreso automáticamente. Para reanudar:
 ```bash
 # Reanudar desde el punto de interrupci\u00f3n
 voxforge chapter narrate mi_libro 1 --out Capitulo_01.mp3
@@ -362,7 +362,7 @@ voxforge config set cache_dir /ruta/a/disco/grande/cache
 # Todas las pruebas
 python -m pytest tests/
 
-# Pruebas especificas
+# Pruebas específicas
 python -m pytest tests/test_core.py
 
 # Con cobertura
@@ -403,9 +403,9 @@ rm -rf .venv
 - \u2192 Documentaci\u00f3n completa
 
 ### Versi\u00f3n 0.8.0
-- \u2192 Integracion con Voice Engine
+- → Integración con Voice Engine
 - \u2192 Soporte para GPU (opcional)
-- \u2192 Studio mode para grabacion profesional
+- → Studio mode para grabación profesional
 
 ### Versi\u00f3n 1.0.0
 - \u2192 Versi\u00f3n estable
