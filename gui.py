@@ -30,6 +30,7 @@ try:
         QSize,
         Qt,
         QTimer,
+        QThread,
         QTranslator,
         QUrl,
         Signal,
