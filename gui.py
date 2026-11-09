@@ -140,7 +140,7 @@ IMPORT_FILTER = "Libros (*.txt *.md *.docx *.epub *.pdf);;Todos los archivos (*)
 VOICE_EXTS = {".wav", ".flac", ".mp3", ".ogg", ".oga", ".m4a", ".aac", ".opus"}
 VOICE_FILTER = "Audio (*.wav *.flac *.mp3 *.ogg *.oga *.m4a *.aac *.opus);;Todos los archivos (*)"
 
-from voxforge.ui.theme import QSS, CYAN, PURPLE, MUTED, MAGENTA
+from voxforge.ui.theme import QSS, CYAN, PURPLE, MUTED, MAGENTA, DEFAULT_THEME
 
 
 
@@ -1742,7 +1742,7 @@ class VoxForgeGUI(QMainWindow):
         self.selected_fragment: int | None = None
         self.show_all_exports = False
         self.now_playing: Path | None = None
-        self._current_theme: str = self.settings.get("theme", DEFAULT_THEME)
+        self._current_theme: str = getattr(self.settings, "theme", DEFAULT_THEME)
 
         self._projects: dict = {}
         self._chapters: dict = {}
@@ -2293,7 +2293,7 @@ class VoxForgeGUI(QMainWindow):
         _apply_theme(QApplication.instance(), theme_name)
         self._current_theme = theme_name
         try:
-            self.settings.set("theme", theme_name)
+            setattr(self.settings, "theme", theme_name)
         except Exception:
             pass
         # Forzar actualización del menú de tema

@@ -56,6 +56,9 @@ class Settings:
     # Preset de FX por defecto para narraciones
     default_fx_preset: str | None = None  # None = sin FX, "audiolibro_pro" para producción
     
+    # Tema de la interfaz gráfica
+    theme: str = "night_city"  # "night_city" o "nova"
+    
     # Configuración de reducción de ruido y de-essing
     noise_gate_threshold: float = -40.0  # Umbral para noise gate (dB)
     deesser_frequency: float = 4000.0  # Frecuencia central para de-esser (Hz)
