@@ -14,8 +14,8 @@
 
 **Caracter\u00edsticas principales:**
 
-- \u2705 **Clonaci\u00f3n de voz multiling\u001e** con Coqui XTTS-v2
-- \u2705 **S\u00edntesis de voz natural** en m\u001as de 15 idiomas
+- \u2705 **Clonaci\u00f3n de voz multiling\u00fce** con Coqui XTTS-v2
+- \u2705 **S\u00edntesis de voz natural** en m\u00e1s de 15 idiomas
 - \u2705 **Gesti\u00f3n de proyectos** con cap\u00adtulos organizados
 - \u2705 **Normalizaci\u00f3n EBU R128** para calidad de estudio profesional
 - \u2705 **Sistema de cach\u00e9 inteligente** para reanudar narraciones interrumpidas
@@ -27,12 +27,12 @@
 
 ## \u26a1 Requisitos del Sistema
 
-| Requisito | M\u001animo | Recomendado |
+| Requisito | M\u00ednimo | Recomendado |
 |-----------|------------|-------------|
 | **Sistema Operativo** | Linux, Windows, macOS | Linux (Ubuntu 22.04+) |
 | **Python** | 3.10 | 3.11+ |
 | **RAM** | 8 GB | 16 GB |
-| **CPU** | 4 n\u001acleos | 8+ n\u001acleos (Intel i5/i7/Ryzen) |
+| **CPU** | 4 n\u00facleos | 8+ n\u00facleos (Intel i5/i7/Ryzen) |
 | **Almacenamiento** | 5 GB libres | 20 GB libres (para modelos y cach\u00e9) |
 | **GPU** | No requerida | No requerida (funciona solo con CPU) |
 
@@ -351,10 +351,10 @@ voxforge config set cache_dir /ruta/a/disco/grande/cache
 ### Est\u00e1ndares de C\u00f3digo
 
 - PEP 8 (Gu\u00eda de estilo de Python)
-- Type hints obligatorios en funciones p\u001ablas
+- Type hints obligatorios en funciones p\u00fablicas
 - Nombres de variables y funciones en snake_case
 - Nombres de clases en PascalCase
-- Docstrings en todas las funciones p\u001ablas
+- Docstrings en todas las funciones p\u00fablicas
 
 ### Ejecutar pruebas
 
@@ -394,11 +394,11 @@ rm -rf .venv
 - \u2705 Capa de servicios centralizada
 - \u2705 Normalizaci\u00f3n EBU R128
 - \u2705 Reanudaci\u00f3n de narraciones
-- \u2705 Soporta m\u001as de 15 idiomas
+- \u2705 Soporta m\u00e1s de 15 idiomas
 
 ### Versi\u00f3n 0.7.0 (Pr\u00f3ximo)
 - \u2192 Interfaz REST API
-- \u2192 Soporte para m\u001ultiples motores TTS
+- \u2192 Soporte para m\u00faltiples motores TTS
 - \u2192 Mejoras en la GUI
 - \u2192 Documentaci\u00f3n completa
 
