@@ -57,7 +57,8 @@ class XttsEngine(TTSEngine):
             from TTS.api import TTS
         except ImportError as exc:
             raise ModelUnavailableError(
-                "Faltan torch o coqui-tts. ¿Activaste el entorno? Ejecuta: source ~/VoxForge/.venv/bin/activate"
+                "Faltan torch o coqui-tts. ¿Ac
+tivaste el entorno? Ejecuta: source ~/VoxForge/.venv/bin/activate"
             ) from exc
 
         try:  # avisos de configuración de transformers sin efecto en el audio
@@ -70,7 +71,8 @@ class XttsEngine(TTSEngine):
         # quien llama al engine (bench o GUI) puede haberlos fijado ya.
         try:
             torch.set_num_interop_threads(1)
-        except RuntimeError:
+        except (RuntimeError, AttributeError):
+            # AttributeError: builds de torch (p.ej. Python 3.14) sin esta API
             pass
         try:
             torch.set_num_threads(self.threads)
@@ -108,7 +110,8 @@ class XttsEngine(TTSEngine):
 
         if self._tts is None:
             raise RuntimeError("El modelo no está cargado: llama a load() primero.")
-        model = self._tts.synthesizer.tts_model
+        
+model = self._tts.synthesizer.tts_model
         torch.manual_seed(seed)  # misma entrada + misma semilla = mismo audio
 
         # Obtener latentes: usar los pasados o calcular/usar caché del speaker_wav
@@ -157,7 +160,8 @@ class XttsEngine(TTSEngine):
 
         return wav
 
-    def get_latents(self, speaker_wav: Path, use_cache: bool = True) -> tuple:
+    def get_latents(self,
+ speaker_wav: Path, use_cache: bool = True) -> tuple:
         """Devuelve (gpt_cond_latent, speaker_embedding) para el speaker dado.
 
         Si use_cache y ya se calcularon para este wav, devuelve el cache.
