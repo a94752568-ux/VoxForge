@@ -87,8 +87,13 @@ class XttsEngine(TTSEngine):
                 "No se pudo cargar XTTS-v2 sin conexión. Si es la primera vez, descarga el modelo "
                 f"con: python -m voxforge model download  ({type(exc).__name__}: {exc})"
             ) from exc
-        # Ganancia gratis y sin riesgo: modo evaluación desactiva dropout y acelera inferencia
-        self._tts.synthesizer.tts_model.eval()
+        # Ganancia gratis y sin riesgo: modo evaluación desactiva dropout y
+        # acelera inferencia. Se protege porque no todas las builds de coqui-tts
+        # (ni los dobles de test) exponen synthesizer/tts_model.
+        try:
+            self._tts.synthesizer.tts_model.eval()
+        except Exception:
+            pass
 
     def unload(self) -> None:
         # El motor es un singleton: no lo descargamos realmente para que

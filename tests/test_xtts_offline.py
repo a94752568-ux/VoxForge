@@ -20,6 +20,12 @@ def _fake_modules(tts_factory):
 
 
 class XttsOfflineTests(unittest.TestCase):
+    def setUp(self):
+        # El motor es un singleton a nivel de clase: aislar cada test con
+        # una instancia fresca para que load() se evalúe de verdad en cada uno.
+        XttsEngine._instance = None
+        XttsEngine._initialized = False
+
     def test_sin_conexion_por_defecto(self):
         with mock.patch.dict(sys.modules, _fake_modules(lambda name: object())), \
                 mock.patch.dict(os.environ, {}):
