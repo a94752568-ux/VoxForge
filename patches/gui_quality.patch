@@ -1,0 +1,178 @@
+--- a/gui.py
++++ b/gui.py
+@@ -140,7 +140,7 @@
+ VOICE_EXTS = {".wav", ".flac", ".mp3", ".ogg", ".oga", ".m4a", ".aac", ".opus"}
+ VOICE_FILTER = "Audio (*.wav *.flac *.mp3 *.ogg *.oga *.m4a *.aac *.opus);;Todos los archivos (*)"
+ 
+-from voxforge.ui.theme import QSS, CYAN, PURPLE, MUTED, MAGENTA, DEFAULT_THEME
++from voxforge.ui.theme import QSS, CYAN, PURPLE, MUTED, MAGENTA, AMBER, GREEN, DEFAULT_THEME
+ 
+ 
+ 
+@@ -2249,6 +2249,14 @@
+         self.btn_fx.setToolTip("Efecto de voz para la narración")
+         self.btn_fx.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+         self.btn_fx.setMenu(self._build_fx_menu())
++        self.chk_quality_retry = QCheckBox("Reintentar anomalías")
++        self.chk_quality_retry.setObjectName("chip")
++        self.chk_quality_retry.setToolTip(
++            "Si está activo, el motor regenera automáticamente fragmentos con "
++            "velocidad anómala, clipping, silencio o DC offset (quality_retry)."
++        )
++        self.chk_quality_retry.setChecked(bool(getattr(self.settings, "quality_retry", True)))
++        self.chk_quality_retry.setCursor(Qt.PointingHandCursor)
+         self.btn_regen = self._btn(
+             "Regenerar", "accent", "Regenerar solo el fragmento seleccionado"
+         )
+@@ -2262,7 +2270,7 @@
+         self.btn_more.setMenu(self._build_menu())
+         for widget in (
+             self.btn_preview, self.btn_pilot, self.btn_fx,
+-            self.btn_regen, self.btn_more,
++            self.chk_quality_retry, self.btn_regen, self.btn_more,
+         ):
+             actions.addWidget(widget)
+         bottom.addLayout(actions)
+@@ -2701,6 +2709,7 @@
+         self.btn_pilot.clicked.connect(self.action_pilot)
+         self.btn_preview.clicked.connect(self.action_preview_30)
+         self.btn_regen.clicked.connect(self.action_regen_fragment)
++        self.chk_quality_retry.toggled.connect(self._on_quality_retry_toggled)
+         self.btn_reload.clicked.connect(self.action_load_fragments)
+         self.btn_refresh.clicked.connect(self.refresh_all)
+         self.btn_open.clicked.connect(self.action_open_exports)
+@@ -3485,6 +3494,9 @@
+         if prog["done"]:
+             if status == "succeeded":
+                 meta = f"Completado en {_fmt_duration(elapsed)}" if elapsed else "Completado"
++                # Actualizar badges OK/DUDOSO tras narrar o regenerar
++                if self.current_chapter is not None and getattr(self, "_fragment_entries", None):
++                    self._render_fragments()
+             else:
+                 meta = f"{prog['text']} · duración {_fmt_duration(elapsed)}" if elapsed else prog["text"]
+         elif status == "pending":
+@@ -3722,7 +3734,56 @@
+     # Fragmentos                                                          #
+     # ------------------------------------------------------------------ #
+ 
++    def _fragment_quality_lookup(self) -> dict[str, dict]:
++        """Mapa texto_fragmento -> {ok, audio_s} desde la caché del perfil del proyecto."""
++        project = self.current_project
++        if not project:
++            return {}
++        info = getattr(self, "_projects", {}).get(project) or {}
++        voice = info.get("voice_profile")
++        if not voice:
++            return {}
++        try:
++            profile = self.store.get_profile(voice)
++            if profile is None:
++                return {}
++            rows = self.store.conn.execute(
++                "SELECT text, ok, audio_s FROM fragments WHERE profile_id = ?",
++                (int(profile["id"]),),
++            ).fetchall()
++        except Exception:
++            return {}
++        out: dict[str, dict] = {}
++        for row in rows:
++            # el último registro gana si hay colisiones de texto
++            out[str(row["text"])] = {
++                "ok": bool(row["ok"]),
++                "audio_s": float(row["audio_s"] or 0.0),
++            }
++        return out
++
++    def _on_quality_retry_toggled(self, checked: bool) -> None:
++        self.settings.quality_retry = bool(checked)
++        self._persist_settings()
++        state = "activado" if checked else "desactivado"
++        self._toast(f"Reintento automático de anomalías {state}.")
++
++    def _persist_settings(self) -> None:
++        """Guarda self.settings en data/config.json (sin campos efímeros)."""
++        from dataclasses import asdict, fields
++        cfg = self.data_dir / "config.json"
++        try:
++            data = asdict(self.settings)
++            # last_activity_time es runtime; no ensuciar el JSON
++            data.pop("last_activity_time", None)
++            known = {f.name for f in fields(self.settings)}
++            data = {k: v for k, v in data.items() if k in known and k != "last_activity_time"}
++            cfg.write_text(__import__("json").dumps(data, indent=2), encoding="utf-8")
++        except Exception as exc:
++            self._toast(f"No se pudo guardar config: {exc}")
++
+     def action_load_fragments(self) -> None:
+         self._load_fragments(quiet=False)
+ 
+@@ -3811,29 +3872,58 @@
+         else:
+             shown = entries
+ 
++        quality = self._fragment_quality_lookup()
++        ok_n = doubt_n = missing_n = 0
++
+         self.fragments.blockSignals(True)
+         self.fragments.clear()
+         for entry in shown:
+             it = QListWidgetItem()
+             if entry["kind"] == "text":
+                 it.setData(ROLE_ID, entry["id"])
+                 it.setData(ROLE_NUMBER, f"{entry['id']:02d}")
+                 it.setData(ROLE_TITLE, entry["excerpt"])
+-                it.setData(ROLE_SUB, _plural(len(entry["text"]), "carácter", "caracteres"))
+-                it.setToolTip(entry["text"])
++                chars = _plural(len(entry["text"]), "carácter", "caracteres")
++                status = quality.get(entry["text"])
++                if status is None:
++                    badge, color, accent, tip_extra = "SIN AUDIO", MUTED, None, "Aún no hay audio en caché."
++                    missing_n += 1
++                elif status.get("ok"):
++                    badge, color, accent = "OK", GREEN, None
++                    tip_extra = f"Caché OK · {status.get('audio_s', 0):.1f} s"
++                    ok_n += 1
++                else:
++                    badge, color, accent = "DUDOSO", AMBER, AMBER
++                    tip_extra = (
++                        f"Marcado como anómalo (ok=0) · {status.get('audio_s', 0):.1f} s. "
++                        "Usa Regenerar o activa «Reintentar anomalías»."
++                    )
++                    doubt_n += 1
++                it.setData(ROLE_SUB, chars)
++                it.setData(ROLE_BADGE, badge)
++                it.setData(ROLE_BADGE_COLOR, color)
++                if accent:
++                    it.setData(ROLE_ACCENT, accent)
++                it.setToolTip(f"{entry['text']}\n\n{tip_extra}")
+             else:
+                 it.setData(ROLE_ID, None)
+                 it.setData(ROLE_TITLE, "Pausa explícita")
+                 it.setData(ROLE_SUB, f"{entry['seconds']:g} s de silencio")
+                 it.setData(ROLE_BADGE, "PAUSA")
+                 it.setData(ROLE_BADGE_COLOR, AMBER)
+                 it.setData(ROLE_ACCENT, AMBER)
+                 it.setToolTip(f"Silencio de {entry['seconds']:g} s")
+             self.fragments.addItem(it)
+         self.fragments.blockSignals(False)
+ 
+         text_total = sum(1 for e in entries if e["kind"] == "text")
+         pauses = sum(1 for e in entries if e["kind"] == "pause")
+         if query:
+             self.lbl_frag_count.setText(f"{len(shown)} de {text_total}")
+             self.fragments.placeholder = f"Sin resultados para «{self.frag_search.text().strip()}»."
+         else:
+-            suffix = f" · {_plural(pauses, 'pausa', 'pausas')}" if pauses else ""
+-            self.lbl_frag_count.setText(f"{_plural(text_total, 'fragmento', 'fragmentos')}{suffix}")
++            q_bits = []
++            if ok_n:
++                q_bits.append(f"{ok_n} OK")
++            if doubt_n:
++                q_bits.append(f"{doubt_n} dudosos")
++            if missing_n:
++                q_bits.append(f"{missing_n} sin audio")
++            quality_txt = f" · {', '.join(q_bits)}" if q_bits else ""
++            suffix = f" · {_plural(pauses, 'pausa', 'pausas')}" if pauses else ""
++            self.lbl_frag_count.setText(
++                f"{_plural(text_total, 'fragmento', 'fragmentos')}{suffix}{quality_txt}"
++            )
