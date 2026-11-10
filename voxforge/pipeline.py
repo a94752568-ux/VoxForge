@@ -360,7 +360,23 @@ def narrate(
                     if not row["ok"]:
                         doubtful += 1
                     log(f"[{text_index}/{text_total}] en caché{note}")
-            else:
+                    # Parche (progreso en caché): el fragmento en caché también
+                    # actualiza la fila de progreso. Sin esto, la GUI no ve el
+                    # avance real mientras se reutiliza caché.
+                    if project_name and chapter_id is not None:
+                        store.update_project_progress(
+                            project_name, chapter_id,
+                            total_fragments=text_total,
+                            processed_fragments=fragments_processed,
+                            current_fragment=text_index,
+                            status="running",
+                        )
+            # Parche (validación de caché): era `else:`; si la validación del
+            # caché fallaba, `needs` quedaba en True pero la ejecución seguía
+            # hacia `parts.append(audio)` con el audio del fragmento anterior
+            # (o sin definir en el primer fragmento). Con `if needs:` el
+            # fragmento corrupto se regenera.
+            if needs:
                 if settings.thermal_guard:
                     waited_total += wait_if_hot(settings.temp_pause_c, settings.temp_resume_c, log)
                 if not loaded:
@@ -508,17 +524,21 @@ def narrate(
     finally:
         # No descargamos el motor: es un singleton que vive entre narraciones
         # en el mismo proceso. gc.collect() en unload() ya libera memoria.
-        
-        # Marcar progreso como fallido si hubo excepción
+
+        # Marcar progreso si la narración quedó incompleta. Parche (pausa):
+        # si el usuario canceló, la fila queda como "paused" para que
+        # `resume=True` la retome; solo un fallo real queda "failed".
+        # Antes, la pausa se marcaba "failed" y la reanudación empezaba de cero.
         if project_name and chapter_id is not None:
             if fragments_processed < text_total:
+                cancelled = cancel_event is not None and cancel_event.is_set()
                 store.update_project_progress(
                     project_name, chapter_id,
                     total_fragments=text_total,
                     processed_fragments=fragments_processed,
                     current_fragment=text_index,
-                    status="failed",
-                    error_message="Narración interrumpida"
+                    status="paused" if cancelled else "failed",
+                    error_message=None if cancelled else "Narración interrumpida"
                 )
 
     final = np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
