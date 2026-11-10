@@ -16,6 +16,7 @@ class FakeEngine(TTSEngine):
     """Motor simulado para tests."""
     name = "fake"
     sample_rate = 24000
+    MODEL = "fake-v1"
 
     def __init__(self):
         self.loads = 0
@@ -28,7 +29,12 @@ class FakeEngine(TTSEngine):
     def unload(self):
         pass
 
-    def synthesize(self, text, reference_wav, language, seed):
+    def get_latents(self, speaker_wav):
+        """Stub compatible con el pipeline: tupla de latentes pre-computados."""
+        return ("fake_cond", "fake_emb")
+
+    def synthesize(self, text, reference_wav=None, language="es", seed=0,
+                   latentes=None, **generation_params):
         self.calls += 1
         self.seeds.append(seed)
         n = int(self.sample_rate * 0.1 * len(text))  # 100 ms por carácter = 10 car/s
@@ -142,8 +148,11 @@ class ResumeIntegrationTest(unittest.TestCase):
             engine=self.fake_engine  # Usar FakeEngine para tests
         )
         
-        # Texto muy largo (debería requerir mucho espacio)
-        texto = "A" * 1000000  # 1 millón de caracteres
+        # Texto largo (debe requerir bastante espacio para el estimador).
+        # Con 1M de caracteres el audio final rondaría los ~9,6 GB de RAM y
+        # reventaría al runner: 8.000 caracteres bastan para validar la
+        # estimación de disco sin agotar memoria.
+        texto = "A" * 8000
         
         request = NarrationRequest(
             project_name="big_project",
