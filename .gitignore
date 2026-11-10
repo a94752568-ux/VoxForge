@@ -91,6 +91,7 @@ pip-delete-this-directory.txt
 *.bak
 *.backup
 *.bak.*
+*.broken.*
 salida_xtts.wav
 screen.jpg
 *.wav
