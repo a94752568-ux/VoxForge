@@ -57,8 +57,8 @@ class XttsEngine(TTSEngine):
             from TTS.api import TTS
         except ImportError as exc:
             raise ModelUnavailableError(
-                "Faltan torch o coqui-tts. ¿Ac
-tivaste el entorno? Ejecuta: source ~/VoxForge/.venv/bin/activate"
+                "Faltan torch o coqui-tts. ¿Activaste el entorno? "
+                "Ejecuta: source ~/VoxForge/.venv/bin/activate"
             ) from exc
 
         try:  # avisos de configuración de transformers sin efecto en el audio
