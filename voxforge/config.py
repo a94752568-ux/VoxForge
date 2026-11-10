@@ -33,15 +33,38 @@ class Settings:
     # velocidad de habla en caracteres por segundo; fuera de rango = fragmento anómalo
     rate_min_cps: float = 6.0       # medido: normales 8-12 car/s, anómalo 4,9 car/s
     rate_max_cps: float = 20.0
-    max_retries: int = 2            # reintentos con otra semilla si un fragmento sale anómalo
-    
+    max_retries: int = 3            # reintentos con otra semilla si un fragmento sale anómalo
+    # Si True, reintenta también cuando analyze_fragment_quality reporta anomalías
+    # (clipping, silencio, DC offset, duración absurda), no solo por velocidad de habla.
+    quality_retry: bool = True
+    # Máximo de muestras en clipping (post soft-clip) para aceptar el fragmento
+    max_clipped_samples: int = 8
+    # Pico mínimo relativo para considerar que hay señal útil
+    min_peak: float = 1e-3
+
+    # =========================================================================
+    # Parámetros de inferencia XTTS-v2 (afectan naturalidad y estabilidad)
+    # =========================================================================
+    # Valores orientados a narración estable (menos loops / blabber / ruido extra).
+    # temperature más baja = más determinista; repetition_penalty alta = menos bucles.
+    temperature: float = 0.65
+    top_p: float = 0.85
+    top_k: int = 50
+    repetition_penalty: float = 5.0
+    length_penalty: float = 1.0
+    speed: float = 1.0
+    # En reintentos se baja temperature un poco y se sube repetition_penalty
+    # para forzar salidas más estables cuando el primer take falla.
+    retry_temperature_delta: float = -0.10
+    retry_repetition_boost: float = 1.5
+
     # =========================================================================
     # Configuración de optimización de audio profesional
     # =========================================================================
     # Post-procesamiento por fragmento para reducir anomalías en el audio final
     target_rms: float = 0.15        # Nivel RMS objetivo para normalización entre fragmentos
     fade_ms: float = 5.0            # Duración de fade in/out en ms (eliminar clicks en bordes)
-    crossfade_ms: float = 10.0      # Crossfade entre fragmentos en ms (uniones suaves)
+    crossfade_ms: float = 12.0      # Crossfade entre fragmentos en ms (uniones suaves)
     max_normalize_gain_db: float = 12.0  # Ganancia máxima de normalización (evitar amplificar ruido)
     
     # =========================================================================
