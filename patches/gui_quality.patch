@@ -51,7 +51,7 @@
              else:
                  meta = f"{prog['text']} · duración {_fmt_duration(elapsed)}" if elapsed else prog["text"]
          elif status == "pending":
-@@ -3722,7 +3734,56 @@
+@@ -3722,6 +3734,54 @@
      # Fragmentos                                                          #
      # ------------------------------------------------------------------ #
  
@@ -106,7 +106,7 @@
      def action_load_fragments(self) -> None:
          self._load_fragments(quiet=False)
  
-@@ -3811,29 +3872,58 @@
+@@ -3808,6 +3868,9 @@
          else:
              shown = entries
  
@@ -116,8 +116,7 @@
          self.fragments.blockSignals(True)
          self.fragments.clear()
          for entry in shown:
-             it = QListWidgetItem()
-             if entry["kind"] == "text":
+@@ -3816,8 +3879,28 @@
                  it.setData(ROLE_ID, entry["id"])
                  it.setData(ROLE_NUMBER, f"{entry['id']:02d}")
                  it.setData(ROLE_TITLE, entry["excerpt"])
@@ -148,22 +147,10 @@
              else:
                  it.setData(ROLE_ID, None)
                  it.setData(ROLE_TITLE, "Pausa explícita")
-                 it.setData(ROLE_SUB, f"{entry['seconds']:g} s de silencio")
-                 it.setData(ROLE_BADGE, "PAUSA")
-                 it.setData(ROLE_BADGE_COLOR, AMBER)
-                 it.setData(ROLE_ACCENT, AMBER)
-                 it.setToolTip(f"Silencio de {entry['seconds']:g} s")
-             self.fragments.addItem(it)
-         self.fragments.blockSignals(False)
- 
-         text_total = sum(1 for e in entries if e["kind"] == "text")
-         pauses = sum(1 for e in entries if e["kind"] == "pause")
-         if query:
+@@ -3835,8 +3918,18 @@
              self.lbl_frag_count.setText(f"{len(shown)} de {text_total}")
              self.fragments.placeholder = f"Sin resultados para «{self.frag_search.text().strip()}»."
          else:
--            suffix = f" · {_plural(pauses, 'pausa', 'pausas')}" if pauses else ""
--            self.lbl_frag_count.setText(f"{_plural(text_total, 'fragmento', 'fragmentos')}{suffix}")
 +            q_bits = []
 +            if ok_n:
 +                q_bits.append(f"{ok_n} OK")
@@ -172,7 +159,11 @@
 +            if missing_n:
 +                q_bits.append(f"{missing_n} sin audio")
 +            quality_txt = f" · {', '.join(q_bits)}" if q_bits else ""
-+            suffix = f" · {_plural(pauses, 'pausa', 'pausas')}" if pauses else ""
+             suffix = f" · {_plural(pauses, 'pausa', 'pausas')}" if pauses else ""
+-            self.lbl_frag_count.setText(f"{_plural(text_total, 'fragmento', 'fragmentos')}{suffix}")
 +            self.lbl_frag_count.setText(
 +                f"{_plural(text_total, 'fragmento', 'fragmentos')}{suffix}{quality_txt}"
 +            )
+             self.fragments.placeholder = (
+                 "Selecciona un capítulo para ver sus fragmentos.\n"
+                 "Cada tarjeta es un bloque de texto que se narra de una vez."
