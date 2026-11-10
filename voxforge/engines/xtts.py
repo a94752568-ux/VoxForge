@@ -110,8 +110,7 @@ class XttsEngine(TTSEngine):
 
         if self._tts is None:
             raise RuntimeError("El modelo no está cargado: llama a load() primero.")
-        
-model = self._tts.synthesizer.tts_model
+        model = self._tts.synthesizer.tts_model
         torch.manual_seed(seed)  # misma entrada + misma semilla = mismo audio
 
         # Obtener latentes: usar los pasados o calcular/usar caché del speaker_wav
@@ -160,8 +159,7 @@ model = self._tts.synthesizer.tts_model
 
         return wav
 
-    def get_latents(self,
- speaker_wav: Path, use_cache: bool = True) -> tuple:
+    def get_latents(self, speaker_wav: Path, use_cache: bool = True) -> tuple:
         """Devuelve (gpt_cond_latent, speaker_embedding) para el speaker dado.
 
         Si use_cache y ya se calcularon para este wav, devuelve el cache.
